@@ -1,0 +1,278 @@
+import { Renderer } from './Renderer';
+import { Input } from './Input';
+import { CameraRig } from './CameraRig';
+import { EntityManager } from './EntityManager';
+import { AudioManager } from './AudioManager';
+import { Entity, isCombatant } from './Entity';
+import { GameEngineContext, type EngineContext } from './EngineContext';
+import { SaveManager } from './SaveManager';
+import { DebugOverlay } from '../ui/DebugOverlay';
+import { HUD, EMPTY_HUD_INFO, type HudInfoProvider } from '../ui/HUD';
+import { Menus } from '../ui/Menus';
+import { CombatSystem } from '../combat/CombatSystem';
+import { createLevel, type Level } from '../world/Level';
+import type { ControlMode } from './Input';
+
+export type Phase = 'TITLE' | 'PLAYING' | 'PAUSED' | 'WON' | 'LOST';
+
+const STEP = 1 / 60;
+const MAX_FRAME = 0.25; // clamp accumulated time -> no spiral of death
+
+/**
+ * Top-level orchestrator. Owns the fixed-timestep loop (with render
+ * interpolation), the phase state machine, the pointer-lock-driven pause, and
+ * the system wiring. Only the PLAYING phase advances the simulation.
+ */
+export class Game {
+  readonly input: Input;
+
+  private readonly renderer: Renderer;
+  private readonly entities: EntityManager;
+  private readonly audio: AudioManager;
+  private readonly cameraRig: CameraRig;
+  private readonly ctx: EngineContext;
+  private readonly overlay: DebugOverlay;
+  private readonly hud: HUD;
+  private readonly menus: Menus;
+  private readonly combat = new CombatSystem();
+
+  private phase: Phase = 'TITLE';
+  /** Read by later combat/magic systems; toggled from the debug overlay. */
+  godmode = false;
+
+  private activeEntity: Entity | null = null;
+  private currentLevel: Level | null = null;
+  private currentLevelId: string | null = null;
+  /** Level-supplied per-frame HUD data (objective/spells/roster). */
+  private hudProvider: HudInfoProvider | null = null;
+
+  private acc = 0;
+  private last = performance.now();
+  private running = false;
+  private fps = 0;
+
+  constructor(
+    private readonly canvas: HTMLCanvasElement,
+    uiRoot: HTMLElement,
+  ) {
+    this.renderer = new Renderer(canvas);
+    this.entities = new EntityManager(this.renderer.scene);
+    this.audio = new AudioManager();
+    this.cameraRig = new CameraRig(this.renderer.camera);
+    this.ctx = new GameEngineContext(
+      this.entities,
+      this.renderer.scene,
+      this.audio,
+      new SaveManager(),
+    );
+
+    this.input = new Input();
+
+    this.overlay = new DebugOverlay(uiRoot, {
+      setGodmode: (on) => {
+        this.godmode = on;
+      },
+      forceWin: () => this.setPhase('WON'),
+      forceLose: () => this.setPhase('LOST'),
+    });
+
+    this.hud = new HUD(uiRoot);
+    this.menus = new Menus(uiRoot, {
+      onStart: () => {
+        this.audio.play('ui-click');
+        this.requestPlay();
+      },
+      onResume: () => {
+        this.audio.play('ui-click');
+        this.requestPlay();
+      },
+      onRetry: () => {
+        this.audio.play('ui-click');
+        this.restart();
+      },
+      onContinue: () => {
+        this.audio.play('ui-click');
+        this.restart();
+      },
+    });
+
+    document.addEventListener('pointerlockchange', this.onPointerLockChange);
+
+    this.setPhase('TITLE');
+  }
+
+  /** Instantiate + load a registered level. */
+  bootInto(levelId: string): void {
+    if (this.currentLevel) {
+      this.currentLevel.unload();
+      this.currentLevel = null;
+    }
+    this.hudProvider = null;
+    const level = createLevel(levelId);
+    level.load(this.ctx);
+    this.currentLevel = level;
+    this.currentLevelId = levelId;
+  }
+
+  /**
+   * Register the per-frame HUD data source (objective / spell slots / roster).
+   * Levels call this from `load()`; passing `null` clears it (HUD then shows only
+   * the active character's vitals). The small Game hook the HUD/menus chunk added.
+   */
+  setHudInfoProvider(provider: HudInfoProvider | null): void {
+    this.hudProvider = provider;
+  }
+
+  /** Restart the current level and return to the title (Retry / Continue). */
+  private restart(): void {
+    if (this.currentLevelId) this.bootInto(this.currentLevelId);
+    this.setPhase('TITLE');
+  }
+
+  setActiveEntity(entity: Entity | null): void {
+    this.activeEntity = entity;
+    this.cameraRig.resnap();
+  }
+
+  /**
+   * Switch camera framing + mouse/input semantics together (FLIGHT vs GROUND).
+   * Called from the PlayerController swap handler so the controlled character and
+   * its control scheme change atomically.
+   */
+  setControlMode(mode: ControlMode): void {
+    this.cameraRig.setMode(mode);
+    this.input.setMode(mode);
+    this.cameraRig.resnap();
+  }
+
+  /** PlayerHost: lets the active character honour the debug godmode toggle. */
+  isGodmode(): boolean {
+    return this.godmode;
+  }
+
+  /** Level hook: jump to the win screen (objective met). Idempotent. */
+  win(): void {
+    if (this.phase !== 'WON') this.setPhase('WON');
+  }
+
+  /** Level hook: jump to the lose screen. Idempotent. */
+  lose(): void {
+    if (this.phase !== 'LOST') this.setPhase('LOST');
+  }
+
+  /** Level hook: phase-aware end-screen title/subtitle (set before win()/lose()). */
+  setEndText(phase: 'WON' | 'LOST', title: string, subtitle: string): void {
+    this.menus.setEndText(phase, title, subtitle);
+  }
+
+  /** Begin the requestAnimationFrame loop. */
+  start(): void {
+    if (this.running) return;
+    this.running = true;
+    this.last = performance.now();
+    requestAnimationFrame(this.frame);
+  }
+
+  private requestPlay(): void {
+    // Pointer-lock + audio resume MUST share this one user gesture.
+    this.audio.resume();
+    void this.canvas.requestPointerLock();
+  }
+
+  private setPhase(phase: Phase): void {
+    const prev = this.phase;
+    this.phase = phase;
+    this.hud.setVisible(phase === 'PLAYING');
+    switch (phase) {
+      case 'PLAYING':
+        this.acc = 0;
+        this.last = performance.now();
+        break;
+      case 'PAUSED':
+        this.exitLock();
+        break;
+      case 'WON':
+        this.exitLock();
+        if (prev !== 'WON') this.audio.play('win');
+        break;
+      case 'LOST':
+        this.exitLock();
+        if (prev !== 'LOST') this.audio.play('lose');
+        break;
+      case 'TITLE':
+        break;
+    }
+    this.menus.render(phase);
+  }
+
+  private frame = (now: number): void => {
+    const frameDt = (now - this.last) / 1000;
+    this.last = now;
+
+    if (frameDt > 0) {
+      this.fps = this.fps === 0 ? 1 / frameDt : this.fps + (1 / frameDt - this.fps) * 0.1;
+    }
+
+    if (this.phase === 'PLAYING') {
+      this.acc += Math.min(frameDt, MAX_FRAME);
+      // A level may resolve to WON/LOST mid-step; stop advancing the sim at once.
+      // The mouse-look delta is an impulse consumed by the FIRST substep only
+      // (Input.beginStep), so it is applied exactly once per rendered frame.
+      let firstStep = true;
+      while (this.acc >= STEP && this.phase === 'PLAYING') {
+        this.entities.capturePrevTransforms();
+        this.input.beginStep(firstStep);
+        firstStep = false;
+        this.step(STEP);
+        this.acc -= STEP;
+      }
+    } else {
+      this.acc = 0;
+    }
+
+    const alpha = this.phase === 'PLAYING' ? this.acc / STEP : 1;
+    this.renderer.render(alpha, this.entities);
+    this.syncDebug();
+    this.hud.sync(this.activeEntity, this.hudProvider?.() ?? EMPTY_HUD_INFO);
+
+    // Per-frame edge-triggered toggles (checked once per frame, not per step).
+    if (this.input.justPressed('debug')) this.overlay.toggle();
+    if (this.input.justPressed('mute')) this.audio.toggleMute();
+
+    this.input.lateUpdate();
+    requestAnimationFrame(this.frame);
+  };
+
+  private step(dt: number): void {
+    this.entities.update(dt, this.ctx);
+    this.combat.resolve(dt, this.ctx);
+    this.currentLevel?.update(dt, this.ctx);
+    if (this.activeEntity) this.cameraRig.update(dt, this.activeEntity);
+  }
+
+  private syncDebug(): void {
+    let health: number | null = null;
+    let energy: number | null = null;
+    const active = this.activeEntity;
+    if (active && isCombatant(active)) {
+      health = active.health;
+      energy = active.energy;
+    }
+    this.overlay.sync({ fps: this.fps, health, energy });
+  }
+
+  private onPointerLockChange = (): void => {
+    const locked = document.pointerLockElement === this.canvas;
+    if (locked) {
+      this.audio.resume();
+      if (this.phase === 'TITLE' || this.phase === 'PAUSED') this.setPhase('PLAYING');
+    } else if (this.phase === 'PLAYING') {
+      // Lock lost mid-play (e.g. Esc) -> pause. Esc is NOT bound as a key.
+      this.setPhase('PAUSED');
+    }
+  };
+
+  private exitLock(): void {
+    if (document.pointerLockElement === this.canvas) document.exitPointerLock();
+  }
+}
