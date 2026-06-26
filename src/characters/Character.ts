@@ -18,6 +18,8 @@ import {
   type ComboConfig,
 } from '../combat/ComboStateMachine';
 import type { MeleeAttacker, MeleeStrike } from '../combat/CombatSystem';
+import { riderPartsOf } from '../art/meshes';
+import { RiderAnimator } from '../art/anim';
 import { ENERGY, GROUND, COMBAT } from '../config/gameConfig';
 
 export type { ControlMode } from '../core/Input';
@@ -186,6 +188,7 @@ export abstract class GroundCharacter extends Character implements MeleeAttacker
   protected readonly combo: ComboStateMachine;
   private yaw = 0;
   private readonly strike: MeleeStrike;
+  private readonly riderAnim = new RiderAnimator();
 
   constructor(
     input: Input,
@@ -211,6 +214,24 @@ export abstract class GroundCharacter extends Character implements MeleeAttacker
 
   protected override get inIFrames(): boolean {
     return this.combo.inIFrames;
+  }
+
+  /**
+   * Per-frame cosmetic animation: idle/move body bob (driven by the rider's own
+   * position delta) + a combo-driven weapon swing. Inherited by Eragon AND Roran;
+   * runs for benched/passive characters too (they bob in place + finish any swing).
+   */
+  override animate(dt: number): void {
+    if (!this.mesh) return;
+    this.riderAnim.update(
+      dt,
+      riderPartsOf(this.mesh),
+      this.position,
+      this.combo.state,
+      this.combo.progress,
+      GROUND.moveSpeed,
+      false,
+    );
   }
 
   /** MeleeAttacker: live hit sphere during ACTIVE frames, else null. */

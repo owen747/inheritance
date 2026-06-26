@@ -202,15 +202,35 @@ export interface RiderOptions {
 
 /** Animatable handles attached to a rider group's userData. */
 export interface RiderParts {
+  /**
+   * Bob/lean pivot containing EVERY visual part (torso, head, arms, legs, weapon).
+   * The root group is the renderer-interpolated transform; cosmetic body bob/lean
+   * mutates THIS child so it is never clobbered. (Externally-added siblings — e.g.
+   * a stagger-glow halo — and root `.scale` squash stay independent of the bob.)
+   */
+  body: THREE.Group;
   /** Empty Group at the right hand — `add()` a weapon (sword/hammer) here. */
   weaponMount: THREE.Group;
   head: THREE.Mesh;
+  /** Hip-pivot groups (leg hangs below the joint) for an optional walk swing. */
+  legL: THREE.Group;
+  legR: THREE.Group;
+}
+
+/** A leg as a hip-pivot group: the box hangs below the joint so `rotation.x` swings it. */
+function legPivot(garb: ColorKey, x: number, name: string): THREE.Group {
+  const hip = new THREE.Group();
+  hip.name = name;
+  hip.position.set(x, 0.75, 0); // hip joint height (leg top)
+  hip.add(piece(box(0.2, 0.75, 0.22), garb, { pos: [0, -0.37, 0] }));
+  return hip;
 }
 
 /**
- * Build a faceted humanoid rider facing -Z, ~1.8 units tall, feet at y=0.
- * The returned group exposes a 'weapon' child (also in userData.weaponMount):
- * a weapon's own +Y axis becomes the held blade/haft direction.
+ * Build a faceted humanoid rider facing -Z, ~1.8 units tall, feet at y=0. All
+ * visual parts live under a single `body` pivot (userData.body) so cosmetic bob/
+ * lean survives the renderer's root-transform interpolation. The 'weapon' child
+ * (userData.weaponMount): a weapon's own +Y axis becomes the held blade direction.
  */
 export function buildRider(opts: RiderOptions = {}): THREE.Group {
   const skin: ColorKey = opts.skin ?? 'eragonSkin';
@@ -220,22 +240,28 @@ export function buildRider(opts: RiderOptions = {}): THREE.Group {
   const group = new THREE.Group();
   group.name = 'rider';
 
+  // Single pivot holding the whole figure — bob/lean it, not the root.
+  const body = new THREE.Group();
+  body.name = 'body';
+  group.add(body);
+
   // Torso + pelvis.
-  group.add(piece(box(0.6, 0.7, 0.32), garb, { pos: [0, 1.15, 0] }));
-  group.add(piece(box(0.5, 0.35, 0.3), garb, { pos: [0, 0.72, 0] }));
+  body.add(piece(box(0.6, 0.7, 0.32), garb, { pos: [0, 1.15, 0] }));
+  body.add(piece(box(0.5, 0.35, 0.3), garb, { pos: [0, 0.72, 0] }));
 
   // Head + hair cap.
   const head = piece(ico(0.24, 0), skin, { pos: [0, 1.7, 0], name: 'head' });
-  group.add(head);
-  group.add(piece(box(0.34, 0.2, 0.34), hair, { pos: [0, 1.82, -0.02] }));
+  body.add(head);
+  body.add(piece(box(0.34, 0.2, 0.34), hair, { pos: [0, 1.82, -0.02] }));
 
   // Arms.
-  group.add(piece(box(0.16, 0.62, 0.16), garb, { pos: [0.4, 1.15, 0] })); // left upper arm
-  group.add(piece(box(0.16, 0.62, 0.16), garb, { pos: [-0.4, 1.15, 0] })); // right upper arm
+  body.add(piece(box(0.16, 0.62, 0.16), garb, { pos: [0.4, 1.15, 0] })); // left upper arm
+  body.add(piece(box(0.16, 0.62, 0.16), garb, { pos: [-0.4, 1.15, 0] })); // right upper arm
 
-  // Legs.
-  group.add(piece(box(0.2, 0.75, 0.22), garb, { pos: [0.16, 0.38, 0] }));
-  group.add(piece(box(0.2, 0.75, 0.22), garb, { pos: [-0.16, 0.38, 0] }));
+  // Legs as hip pivots (walk swing).
+  const legL = legPivot(garb, 0.16, 'legL');
+  const legR = legPivot(garb, -0.16, 'legR');
+  body.add(legL, legR);
 
   // Weapon mount at the right hand. A weapon built along +Y is held upright;
   // the mount is tilted slightly forward (-Z) for a ready pose.
@@ -243,11 +269,21 @@ export function buildRider(opts: RiderOptions = {}): THREE.Group {
   weaponMount.name = 'weapon';
   weaponMount.position.set(-0.5, 0.95, 0.05);
   weaponMount.rotation.set(-0.2, 0, 0.05);
-  group.add(weaponMount);
+  body.add(weaponMount);
 
-  const parts: RiderParts = { weaponMount, head };
+  const parts: RiderParts = { body, weaponMount, head, legL, legR };
   group.userData = parts;
   return group;
+}
+
+/** Typed read of a rider group's animatable parts (from userData). */
+export function riderPartsOf(o: THREE.Object3D): RiderParts {
+  return o.userData as RiderParts;
+}
+
+/** Typed read of a dragon group's animatable parts (from userData). */
+export function dragonPartsOf(o: THREE.Object3D): DragonParts {
+  return o.userData as DragonParts;
 }
 
 // ----------------------------------------------------------------------------

@@ -313,6 +313,13 @@ export class Game {
       this.acc = 0;
     }
 
+    // Cosmetic mesh animation (wings/weapons/bob) on the REAL frame delta, AFTER
+    // the fixed-step sim and BEFORE the renderer interpolates root transforms. Runs
+    // every frame regardless of phase (so dragons keep flapping while paused), and
+    // only mutates child sub-parts — never the interpolated root. Clamp the dt so a
+    // long stall (tab refocus) can't produce a giant animation jump.
+    if (frameDt > 0) this.entities.animateAll(Math.min(frameDt, MAX_FRAME));
+
     const alpha = this.phase === 'PLAYING' ? this.acc / STEP : 1;
     this.renderer.render(alpha, this.entities);
     this.syncDebug();

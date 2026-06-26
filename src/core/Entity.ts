@@ -36,6 +36,17 @@ export abstract class Entity {
   abstract update(dt: number, ctx: EngineContext): void;
 
   /**
+   * Per-RENDER-FRAME cosmetic animation hook (real wall-clock `dt`), called once
+   * per rendered frame AFTER the fixed-step sim and BEFORE the renderer interpolates
+   * the root transform. Default is a no-op.
+   *
+   * CONTRACT: only mutate CHILD sub-parts (`.rotation`/`.position`/`.scale` of
+   * children) — NEVER the root `mesh.position`/`mesh.quaternion`, which the renderer
+   * overwrites every frame from the interpolated sim transform. Keep allocation-free.
+   */
+  animate(_dt: number): void {}
+
+  /**
    * Snap the visual mesh and the prev-transform onto the current transform.
    * Call after positioning an entity at spawn so the first interpolated frame
    * does not lerp from the origin.

@@ -12,7 +12,8 @@ import { ComboStateMachine, type ComboConfig } from '../combat/ComboStateMachine
 import type { MeleeAttacker, MeleeStrike } from '../combat/CombatSystem';
 import type { SpellSystem } from '../magic/SpellSystem';
 import { SPELL_BY_ID, type Spell } from '../magic/spells';
-import { buildRider, buildSword } from '../art/meshes';
+import { buildRider, buildSword, riderPartsOf } from '../art/meshes';
+import { RiderAnimator } from '../art/anim';
 import { getVfx } from '../art/vfx';
 import { COMBAT, GROUND } from '../config/gameConfig';
 
@@ -66,6 +67,7 @@ export class Murtagh extends Enemy implements MeleeAttacker {
   private casting = false;
   private castWindup = 0;
   private pendingSpell: Spell | null = null;
+  private readonly riderAnim = new RiderAnimator();
 
   constructor(spells: SpellSystem, audio: AudioManager | null = null) {
     super(
@@ -109,6 +111,20 @@ export class Murtagh extends Enemy implements MeleeAttacker {
     this.strike.knockback = step.knockback;
     this.strike.team = this.team;
     return this.strike;
+  }
+
+  /** Per-frame walk bob + combo-driven sword swing. */
+  override animate(dt: number): void {
+    if (!this.mesh) return;
+    this.riderAnim.update(
+      dt,
+      riderPartsOf(this.mesh),
+      this.position,
+      this.combo.state,
+      this.combo.progress,
+      MURTAGH.moveSpeed,
+      false,
+    );
   }
 
   protected think(dt: number, ctx: EngineContext): void {

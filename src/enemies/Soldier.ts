@@ -9,7 +9,8 @@ import type { AudioManager } from '../core/AudioManager';
 import { Enemy } from './Enemy';
 import { ComboStateMachine, type ComboConfig } from '../combat/ComboStateMachine';
 import type { MeleeAttacker, MeleeStrike } from '../combat/CombatSystem';
-import { buildRider, buildSword } from '../art/meshes';
+import { buildRider, buildSword, riderPartsOf } from '../art/meshes';
+import { RiderAnimator } from '../art/anim';
 import { COMBAT, GROUND } from '../config/gameConfig';
 
 // ---- Tunables ---------------------------------------------------------------
@@ -45,6 +46,7 @@ const _targetQuat = new THREE.Quaternion();
 export class Soldier extends Enemy implements MeleeAttacker {
   private readonly combo: ComboStateMachine;
   private readonly strike: MeleeStrike;
+  private readonly riderAnim = new RiderAnimator();
 
   constructor(audio: AudioManager | null = null) {
     super(
@@ -85,6 +87,20 @@ export class Soldier extends Enemy implements MeleeAttacker {
     this.strike.knockback = step.knockback;
     this.strike.team = this.team;
     return this.strike;
+  }
+
+  /** Per-frame walk bob + combo-driven sword swing. */
+  override animate(dt: number): void {
+    if (!this.mesh) return;
+    this.riderAnim.update(
+      dt,
+      riderPartsOf(this.mesh),
+      this.position,
+      this.combo.state,
+      this.combo.progress,
+      SOLDIER.moveSpeed,
+      false,
+    );
   }
 
   protected think(dt: number, _ctx: EngineContext): void {

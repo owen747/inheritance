@@ -53,6 +53,8 @@ export class ComboStateMachine {
 
   private stepIndex = -1;
   private timer = 0;
+  /** Duration of the CURRENT timed phase (windup/active/recovery) — for `progress`. */
+  private phaseLen = 0;
   private buffered = false;
   private bufferAge = 0;
   private rollTimer = 0;
@@ -98,6 +100,7 @@ export class ComboStateMachine {
     this.buffered = false;
     this.state = 'WINDUP';
     this.timer = this.heavyStep.windup;
+    this.phaseLen = this.heavyStep.windup;
     this.hitSet.clear();
   }
 
@@ -140,10 +143,12 @@ export class ComboStateMachine {
     if (this.state === 'WINDUP') {
       this.state = 'ACTIVE';
       this.timer = step.active;
+      this.phaseLen = step.active;
       this.hitSet.clear(); // fresh window -> a target can be hit once per swing
     } else if (this.state === 'ACTIVE') {
       this.state = 'RECOVERY';
       this.timer = step.recovery;
+      this.phaseLen = step.recovery;
     } else if (this.state === 'RECOVERY') {
       if (this.heavy) {
         // Heavy is standalone: never chains; back to IDLE after recovery.
@@ -182,6 +187,17 @@ export class ComboStateMachine {
     return this.state === 'ROLL';
   }
 
+  /**
+   * Normalized 0..1 progress through the CURRENT timed phase (WINDUP/ACTIVE/
+   * RECOVERY): 0 at phase start, 1 at phase end. 0 outside a timed phase (IDLE/
+   * ROLL). Drives the cosmetic weapon-swing pose so the arc matches the hit timing.
+   */
+  get progress(): number {
+    if (this.phaseLen <= 0) return 0;
+    const p = 1 - this.timer / this.phaseLen;
+    return p < 0 ? 0 : p > 1 ? 1 : p;
+  }
+
   /** Inside the i-frame window at the START of the roll. */
   get inIFrames(): boolean {
     return this.state === 'ROLL' && this.rollDuration - this.rollTimer < this.rollIFrames;
@@ -191,6 +207,7 @@ export class ComboStateMachine {
     this.stepIndex = index;
     this.state = 'WINDUP';
     this.timer = this.steps[index].windup;
+    this.phaseLen = this.steps[index].windup;
     this.hitSet.clear();
   }
 }

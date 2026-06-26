@@ -14,7 +14,8 @@ import type { Combatant } from '../core/Entity';
 import { Enemy } from './Enemy';
 import { ComboStateMachine, type ComboConfig } from '../combat/ComboStateMachine';
 import type { MeleeAttacker, MeleeStrike } from '../combat/CombatSystem';
-import { buildRider, buildSword } from '../art/meshes';
+import { buildRider, buildSword, riderPartsOf } from '../art/meshes';
+import { RiderAnimator } from '../art/anim';
 import { glowMaterial } from '../art/materials';
 import { getVfx } from '../art/vfx';
 import { COMBAT, GROUND, STAGGER } from '../config/gameConfig';
@@ -66,6 +67,7 @@ export class LaughingSoldier extends Enemy implements MeleeAttacker {
   private _staggered = false;
   private staggerTimer = 0;
   private flashPhase = 0;
+  private readonly riderAnim = new RiderAnimator();
 
   /** Halo mesh shown only while staggered (the loud telegraph). */
   private readonly glow: THREE.Mesh;
@@ -148,6 +150,24 @@ export class LaughingSoldier extends Enemy implements MeleeAttacker {
     this.strike.knockback = step.knockback;
     this.strike.team = this.team;
     return this.strike;
+  }
+
+  /**
+   * Per-frame walk bob + combo-driven sword swing. While STAGGERED the bob is
+   * skipped (the `staggered` flag rests body/weapon neutral) so it never fights
+   * the think()-applied root squash that telegraphs the hunched, executable state.
+   */
+  override animate(dt: number): void {
+    if (!this.mesh) return;
+    this.riderAnim.update(
+      dt,
+      riderPartsOf(this.mesh),
+      this.position,
+      this.combo.state,
+      this.combo.progress,
+      LAUGHER.moveSpeed,
+      this._staggered,
+    );
   }
 
   protected think(dt: number, _ctx: EngineContext): void {

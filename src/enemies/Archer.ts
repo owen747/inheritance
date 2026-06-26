@@ -15,7 +15,8 @@ import * as THREE from 'three';
 import type { EngineContext } from '../core/EngineContext';
 import type { AudioManager } from '../core/AudioManager';
 import { Enemy } from './Enemy';
-import { buildRider } from '../art/meshes';
+import { buildRider, riderPartsOf } from '../art/meshes';
+import { RiderAnimator } from '../art/anim';
 import { getVfx } from '../art/vfx';
 import { GROUND } from '../config/gameConfig';
 
@@ -84,6 +85,7 @@ export class Archer extends Enemy {
 
   /** Locked firing solution (full velocity vector), captured when aiming begins. */
   private readonly lockedVel = new THREE.Vector3(0, 0, -ARCHER.arrowSpeed);
+  private readonly riderAnim = new RiderAnimator();
 
   constructor(opts: ArcherOptions = {}, audio: AudioManager | null = null) {
     super(
@@ -101,6 +103,20 @@ export class Archer extends Enemy {
     // Ground archers stand on the plane; rooftop archers KEEP the elevated y the
     // level assigns after construction (so do NOT pin y here for rooftops).
     if (!this.rooftop) this.position.y = GROUND.groundY;
+  }
+
+  /** Per-frame body bob (no melee combo — the bow is a ranged telegraph). */
+  override animate(dt: number): void {
+    if (!this.mesh) return;
+    this.riderAnim.update(
+      dt,
+      riderPartsOf(this.mesh),
+      this.position,
+      'IDLE',
+      0,
+      ARCHER.moveSpeed,
+      false,
+    );
   }
 
   protected think(dt: number, ctx: EngineContext): void {

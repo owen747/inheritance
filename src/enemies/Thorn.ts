@@ -10,7 +10,8 @@ import type { AudioManager } from '../core/AudioManager';
 import { Enemy } from './Enemy';
 import { ComboStateMachine, type ComboConfig } from '../combat/ComboStateMachine';
 import type { MeleeAttacker, MeleeStrike } from '../combat/CombatSystem';
-import { buildDragon } from '../art/meshes';
+import { buildDragon, dragonPartsOf, type DragonParts } from '../art/meshes';
+import { flapWings } from '../art/anim';
 import { getVfx } from '../art/vfx';
 import { COMBAT } from '../config/gameConfig';
 
@@ -73,6 +74,9 @@ export class Thorn extends Enemy implements MeleeAttacker {
   private strafeSign: 1 | -1 = 1;
   private strafeFlip = THORN.strafeFlipInterval;
 
+  private readonly dragonParts: DragonParts;
+  private animT = 0;
+
   constructor(audio: AudioManager | null = null) {
     super(
       {
@@ -83,7 +87,9 @@ export class Thorn extends Enemy implements MeleeAttacker {
       audio,
     );
     this.combo = new ComboStateMachine(CLAW_COMBO);
-    this.mesh = buildDragon('thorn');
+    const dragon = buildDragon('thorn');
+    this.mesh = dragon;
+    this.dragonParts = dragonPartsOf(dragon);
     this.position.y = 28;
     this.strike = {
       team: this.team,
@@ -107,6 +113,13 @@ export class Thorn extends Enemy implements MeleeAttacker {
     this.strike.knockback = step.knockback;
     this.strike.team = this.team;
     return this.strike;
+  }
+
+  /** Per-frame wing-beat — a strong steady cruise, deeper while attacking/breathing. */
+  override animate(dt: number): void {
+    this.animT += dt;
+    const intensity = this.breathState === 'breathing' || this.combo.isAttacking ? 1.3 : 1.0;
+    flapWings(this.dragonParts, this.animT, intensity);
   }
 
   protected think(dt: number, ctx: EngineContext): void {

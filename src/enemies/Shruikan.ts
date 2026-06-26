@@ -12,7 +12,8 @@ import type { AudioManager } from '../core/AudioManager';
 import { Enemy } from './Enemy';
 import { ComboStateMachine, type ComboConfig } from '../combat/ComboStateMachine';
 import type { MeleeAttacker, MeleeStrike } from '../combat/CombatSystem';
-import { buildDragon } from '../art/meshes';
+import { buildDragon, dragonPartsOf, type DragonParts } from '../art/meshes';
+import { flapWings } from '../art/anim';
 import { getVfx } from '../art/vfx';
 import { COMBAT } from '../config/gameConfig';
 
@@ -106,6 +107,9 @@ export class Shruikan extends Enemy implements MeleeAttacker {
   private readonly diveHitSet = new Set<number>();
   private readonly diveStrike: MeleeStrike;
 
+  private readonly dragonParts: DragonParts;
+  private animT = 0;
+
   constructor(audio: AudioManager | null = null) {
     super(
       {
@@ -116,8 +120,10 @@ export class Shruikan extends Enemy implements MeleeAttacker {
       audio,
     );
     this.combo = new ComboStateMachine(CLAW_COMBO);
-    this.mesh = buildDragon('shruikan');
-    this.mesh.scale.setScalar(SHRUIKAN.meshScale);
+    const dragon = buildDragon('shruikan');
+    dragon.scale.setScalar(SHRUIKAN.meshScale);
+    this.mesh = dragon;
+    this.dragonParts = dragonPartsOf(dragon);
     this.position.y = 32;
 
     this.strike = {
@@ -157,6 +163,18 @@ export class Shruikan extends Enemy implements MeleeAttacker {
     this.strike.knockback = step.knockback;
     this.strike.team = this.team;
     return this.strike;
+  }
+
+  /** Per-frame wing-beat — massive slow beats, big surge during a dive-swipe. */
+  override animate(dt: number): void {
+    this.animT += dt;
+    const diving = this.diveState === 'windup' || this.diveState === 'diving';
+    const intensity = diving
+      ? 1.6
+      : this.combo.isAttacking || this.breathState === 'breathing'
+        ? 1.2
+        : 0.9;
+    flapWings(this.dragonParts, this.animT, intensity);
   }
 
   protected think(dt: number, ctx: EngineContext): void {

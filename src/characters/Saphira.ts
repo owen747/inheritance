@@ -10,7 +10,8 @@ import type { AudioManager } from '../core/AudioManager';
 import { Character, type ControlMode } from './Character';
 import { ComboStateMachine, type ComboConfig } from '../combat/ComboStateMachine';
 import type { MeleeAttacker, MeleeStrike } from '../combat/CombatSystem';
-import { buildDragon } from '../art/meshes';
+import { buildDragon, dragonPartsOf, type DragonParts } from '../art/meshes';
+import { flapWings } from '../art/anim';
 import { getVfx } from '../art/vfx';
 import { clamp } from '../core/mathx';
 import { FLIGHT, ENERGY, COMBAT } from '../config/gameConfig';
@@ -42,11 +43,16 @@ export class Saphira extends Character implements MeleeAttacker {
   private readonly combo: ComboStateMachine;
   private readonly strike: MeleeStrike;
 
+  private readonly dragonParts: DragonParts;
+  private animT = 0;
+
   constructor(input: Input, audio: AudioManager | null = null) {
     super(input, { team: 'player', maxHealth: 220, maxEnergy: 90 }, audio);
     this.combo = new ComboStateMachine(CLAW_COMBO);
     this.collider = { radius: 2.6 };
-    this.mesh = buildDragon('saphira');
+    const dragon = buildDragon('saphira');
+    this.mesh = dragon;
+    this.dragonParts = dragonPartsOf(dragon);
     this.strike = {
       team: this.team,
       center: new THREE.Vector3(),
@@ -115,6 +121,16 @@ export class Saphira extends Character implements MeleeAttacker {
   protected override onActiveChanged(on: boolean): void {
     if (!on) this.hoverBaseY = this.position.y;
     else this.throttle = FLIGHT.cruiseSpeed;
+  }
+
+  /** Per-frame wing-beat — faster/deeper the harder she's driving (throttle). */
+  override animate(dt: number): void {
+    this.animT += dt;
+    const speedN =
+      (this.throttle - FLIGHT.minSpeed) / Math.max(1e-3, FLIGHT.maxSpeed - FLIGHT.minSpeed);
+    // Gentle wing idle when landed/auto-hovering (benched); stronger when piloted.
+    const intensity = this.active ? 0.6 + speedN * 0.8 : 0.2;
+    flapWings(this.dragonParts, this.animT, intensity);
   }
 
   private breatheFire(dt: number, ctx: EngineContext): void {

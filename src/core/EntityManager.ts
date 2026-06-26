@@ -42,6 +42,15 @@ export class EntityManager {
     return this.entities.length;
   }
 
+  /**
+   * Run every entity's per-frame cosmetic animation pass with the REAL frame delta.
+   * Called once per rendered frame (decoupled from the fixed sim step) so animation
+   * is smooth at any refresh rate. Allocation-free (no per-frame closure).
+   */
+  animateAll(dt: number): void {
+    for (const entity of this.entities) entity.animate(dt);
+  }
+
   /** Snapshot current transforms as previous, BEFORE a fixed step (for interp). */
   capturePrevTransforms(): void {
     for (const entity of this.entities) {

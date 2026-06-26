@@ -13,7 +13,8 @@ import { Roran } from '../characters/Roran';
 import { ComboStateMachine, type ComboConfig } from '../combat/ComboStateMachine';
 import type { MeleeAttacker, MeleeStrike } from '../combat/CombatSystem';
 import { damageThroughWard } from '../combat/Health';
-import { buildRider, buildHammer } from '../art/meshes';
+import { buildRider, buildHammer, riderPartsOf } from '../art/meshes';
+import { RiderAnimator } from '../art/anim';
 import { COMBAT, GROUND, ARMOR } from '../config/gameConfig';
 
 // ---- Tunables ---------------------------------------------------------------
@@ -49,6 +50,7 @@ const _targetQuat = new THREE.Quaternion();
 export class ArmoredBrute extends Enemy implements MeleeAttacker {
   private readonly combo: ComboStateMachine;
   private readonly strike: MeleeStrike;
+  private readonly riderAnim = new RiderAnimator();
 
   constructor(audio: AudioManager | null = null) {
     super(
@@ -103,6 +105,20 @@ export class ArmoredBrute extends Enemy implements MeleeAttacker {
     this.strike.knockback = step.knockback;
     this.strike.team = this.team;
     return this.strike;
+  }
+
+  /** Per-frame walk bob + a big, slow combo-driven hammer swing. */
+  override animate(dt: number): void {
+    if (!this.mesh) return;
+    this.riderAnim.update(
+      dt,
+      riderPartsOf(this.mesh),
+      this.position,
+      this.combo.state,
+      this.combo.progress,
+      BRUTE.moveSpeed,
+      false,
+    );
   }
 
   protected think(dt: number, _ctx: EngineContext): void {
