@@ -20,6 +20,8 @@ import {
 import type { MeleeAttacker, MeleeStrike } from '../combat/CombatSystem';
 import { riderPartsOf } from '../art/meshes';
 import { RiderAnimator } from '../art/anim';
+import { HitFlash } from '../art/hitFlash';
+import type { Knockbackable } from '../combat/CombatSystem';
 import { ENERGY, GROUND, COMBAT } from '../config/gameConfig';
 
 export type { ControlMode } from '../core/Input';
@@ -41,7 +43,7 @@ export interface CharacterOptions {
  * correct even when several fixed steps run inside one rendered frame — unlike the
  * frame-scoped `Input.justPressed`).
  */
-export abstract class Character extends Entity {
+export abstract class Character extends Entity implements Knockbackable {
   team: Team;
   maxHealth: number;
   health: number;
@@ -77,6 +79,11 @@ export abstract class Character extends Entity {
 
   protected readonly input: Input;
   protected readonly audio: AudioManager | null;
+
+  /** Lazily-built per-instance white hit-flash (clones this mesh's materials). */
+  private hitFlash: HitFlash | null = null;
+  /** Decaying knockback impulse (units/sec); integrated + bled off each step. */
+  private readonly knockVel = new THREE.Vector3();
 
   private readonly prevHeld = new Map<InputAction, boolean>();
 
@@ -126,6 +133,7 @@ export abstract class Character extends Entity {
 
   takeDamage(amount: number, _src?: Entity, _opts?: { finisher?: boolean }): void {
     if (this.invulnerable) return;
+    this.triggerHitFlash();
     amount *= this.damageTakenScale;
     const wardBefore = this.wardHp;
     damageThroughWard(this, amount);
@@ -151,8 +159,57 @@ export abstract class Character extends Entity {
     if (this.active) this.controlActive(dt, ctx);
     else this.controlPassive(dt, ctx);
 
+    this.integrateKnockback(dt);
     regenEnergy(this, dt, ENERGY.regenPerSec);
     this.refreshEdges();
+  }
+
+  /**
+   * Per-render-frame cosmetic pass. The base decays the hit-flash; subclasses add
+   * their mesh animation by overriding {@link animateBody} (NOT `animate`).
+   */
+  override animate(dt: number): void {
+    this.hitFlash?.update(dt);
+    this.animateBody(dt);
+  }
+
+  /** Subclass cosmetic mesh animation hook (wings / weapon / bob). */
+  protected animateBody(_dt: number): void {}
+
+  /** Build (once) + pop the white hit-flash on this character's mesh. */
+  protected triggerHitFlash(strength = 1): void {
+    if (!this.hitFlash && this.mesh) this.hitFlash = HitFlash.fromMesh(this.mesh);
+    this.hitFlash?.trigger(strength);
+  }
+
+  /**
+   * Knockbackable: add a horizontal impulse (decaying shove) instead of teleporting.
+   * `dirX/dirZ` is a unit XZ direction; `strength` is the strike's knockback value.
+   */
+  applyKnockback(dirX: number, dirZ: number, strength: number): void {
+    const k = strength * COMBAT.knockImpulse;
+    this.knockVel.x += dirX * k;
+    this.knockVel.z += dirZ * k;
+    const len2 = this.knockVel.x * this.knockVel.x + this.knockVel.z * this.knockVel.z;
+    const max = COMBAT.knockMax;
+    if (len2 > max * max) {
+      const s = max / Math.sqrt(len2);
+      this.knockVel.x *= s;
+      this.knockVel.z *= s;
+    }
+  }
+
+  /** Integrate + exponentially decay the knockback shove (allocation-free). */
+  private integrateKnockback(dt: number): void {
+    if (this.knockVel.x === 0 && this.knockVel.z === 0) return;
+    this.position.x += this.knockVel.x * dt;
+    this.position.z += this.knockVel.z * dt;
+    const decay = Math.exp(-COMBAT.knockDecay * dt);
+    this.knockVel.x *= decay;
+    this.knockVel.z *= decay;
+    if (this.knockVel.x * this.knockVel.x + this.knockVel.z * this.knockVel.z < 0.01) {
+      this.knockVel.set(0, 0, 0);
+    }
   }
 
   /** True only on the fixed step the action transitions up -> down. */
@@ -224,7 +281,7 @@ export abstract class GroundCharacter extends Character implements MeleeAttacker
    * position delta) + a combo-driven weapon swing. Inherited by Eragon AND Roran;
    * runs for benched/passive characters too (they bob in place + finish any swing).
    */
-  override animate(dt: number): void {
+  protected override animateBody(dt: number): void {
     if (!this.mesh) return;
     this.riderAnim.update(
       dt,

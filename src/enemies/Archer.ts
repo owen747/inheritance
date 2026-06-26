@@ -106,7 +106,7 @@ export class Archer extends Enemy {
   }
 
   /** Per-frame body bob (no melee combo — the bow is a ranged telegraph). */
-  override animate(dt: number): void {
+  protected override animateBody(dt: number): void {
     if (!this.mesh) return;
     this.riderAnim.update(
       dt,

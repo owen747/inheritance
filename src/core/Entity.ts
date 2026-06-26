@@ -30,6 +30,15 @@ export abstract class Entity {
 
   alive = true;
 
+  /**
+   * Set true by an entity that is dead (`alive=false`) but still playing a brief
+   * death animation (e.g. an enemy's shrink/fade). The EntityManager RETAINS such
+   * an entity in the world — disposing it only once it stops dying — while team /
+   * combat queries (which filter on `alive`) already exclude it. The entity drives
+   * its own `dying` timer in `animate()` and clears the flag when the fade ends.
+   */
+  dying = false;
+
   /** Set true by combatants so combat/spell systems can filter them cheaply. */
   isCombatant = false;
 

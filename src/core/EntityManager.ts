@@ -67,7 +67,9 @@ export class EntityManager {
     }
     for (let i = this.entities.length - 1; i >= 0; i--) {
       const entity = this.entities[i];
-      if (!entity.alive) {
+      // Retain a still-dying entity (alive=false but mid death-fade); it is already
+      // excluded from team/combat queries, and removes itself by clearing `dying`.
+      if (!entity.alive && !entity.dying) {
         this.entities.splice(i, 1);
         this.disposeEntity(entity);
       }

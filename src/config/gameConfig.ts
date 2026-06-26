@@ -86,8 +86,26 @@ export const COMBAT = {
   rollIFrames: 0.32,
   /** Roll travel speed (units/sec). */
   rollSpeed: 12,
-  /** Hitstop freeze applied to both combatants on a clean hit (seconds). */
-  hitstop: 0.07,
+  /** Base hitstop freeze (seconds) — the floor every clean hit gets. */
+  hitstop: 0.05,
+  /** Extra hitstop seconds per point of strike damage (bigger hits FREEZE longer). */
+  hitstopPerDamage: 0.0018,
+  /** Hitstop bonus (seconds) when the landed hit is a finisher (heavy execute). */
+  hitstopFinisher: 0.08,
+  /** Hard cap on computed hitstop (seconds) so a huge hit can't lock the game. */
+  hitstopMax: 0.18,
+  /**
+   * Knockback impulse model (replaces the old instant teleport). A landed hit adds
+   * `strike.knockback * knockImpulse` to the target's knock-velocity (units/sec),
+   * which then decays exponentially so the target SLIDES to a stop.
+   */
+  knockImpulse: 11,
+  /** Decay rate (lambda) of the knock-velocity per second (slide-to-stop). */
+  knockDecay: 9,
+  /** Hard cap on knock-velocity magnitude (units/sec) — keeps shoves bounded. */
+  knockMax: 26,
+  /** Extra knock multiplier on a finisher hit (heavy hits knock further). */
+  knockFinisherMul: 1.5,
   /** Base camera-shake trauma added on ANY landed melee hit (0..1). */
   shakeHit: 0.16,
   /** Extra trauma added per point of strike damage (bigger hits shake more). */

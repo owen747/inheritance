@@ -223,6 +223,20 @@
   }
 }
 
+/* ---- Level-transition veil ------------------------------------------------ */
+
+/* Full-screen black cover above the menus (z 40), used to hide the boot->play
+   menu flash between campaign levels. pointer-events:none also set inline. */
+.transition-veil {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  background: #000;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 500ms ease;
+}
+
 /* ---- Menus ---------------------------------------------------------------- */
 
 .menu {

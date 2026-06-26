@@ -39,6 +39,8 @@ export class ProjectilePool extends Entity {
   private cursor = 0;
 
   private readonly instanced: THREE.InstancedMesh;
+  /** A larger additive halo around each core, so shots read as energy not billiards. */
+  private readonly halo: THREE.InstancedMesh;
 
   constructor(capacity = 160) {
     super();
@@ -56,23 +58,46 @@ export class ProjectilePool extends Entity {
     this.targetTeam = new Array<Team>(capacity).fill('enemy');
 
     const geo = new THREE.SphereGeometry(1, 8, 6);
-    const mat = new THREE.MeshBasicMaterial({ vertexColors: true });
+    // Additive + bright so a fireball/lance/bolt glows like energy. Vertex colors
+    // carry each shot's hue.
+    const mat = new THREE.MeshBasicMaterial({ vertexColors: true, blending: THREE.AdditiveBlending });
     this.instanced = new THREE.InstancedMesh(geo, mat, capacity);
     this.instanced.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
     this.instanced.frustumCulled = false;
+
+    // Halo: same sphere, a soft additive shell scaled up around each core.
+    const haloMat = new THREE.MeshBasicMaterial({
+      vertexColors: true,
+      transparent: true,
+      opacity: 0.35,
+      depthWrite: false,
+      blending: THREE.AdditiveBlending,
+    });
+    this.halo = new THREE.InstancedMesh(geo, haloMat, capacity);
+    this.halo.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+    this.halo.frustumCulled = false;
 
     // Park every instance off-screen initially.
     for (let i = 0; i < capacity; i++) {
       _matrix.compose(_hidden, _quat, _zero);
       this.instanced.setMatrixAt(i, _matrix);
+      this.halo.setMatrixAt(i, _matrix);
       this.instanced.setColorAt(i, _color.set(0xffaa33));
+      this.halo.setColorAt(i, _color);
     }
     this.instanced.instanceMatrix.needsUpdate = true;
+    this.halo.instanceMatrix.needsUpdate = true;
     if (this.instanced.instanceColor) this.instanced.instanceColor.needsUpdate = true;
+    if (this.halo.instanceColor) this.halo.instanceColor.needsUpdate = true;
 
-    this.mesh = this.instanced;
+    const root = new THREE.Group();
+    root.add(this.instanced, this.halo);
+    this.mesh = root;
     this.collider = { radius: 0 };
   }
+
+  /** Scale factor of the halo shell relative to the projectile core radius. */
+  private static readonly HALO_SCALE = 2.1;
 
   /** Launch a projectile from a spec. Overwrites the oldest slot if full. */
   spawn(spec: ProjectileSpec): void {
@@ -88,8 +113,11 @@ export class ProjectilePool extends Entity {
     this.radius[i] = spec.radius;
     this.active[i] = 1;
     this.targetTeam[i] = spec.team === 'player' ? 'enemy' : 'player';
-    this.instanced.setColorAt(i, _color.set(spec.color ?? 0xffaa33));
+    _color.set(spec.color ?? 0xffaa33);
+    this.instanced.setColorAt(i, _color);
+    this.halo.setColorAt(i, _color);
     if (this.instanced.instanceColor) this.instanced.instanceColor.needsUpdate = true;
+    if (this.halo.instanceColor) this.halo.instanceColor.needsUpdate = true;
   }
 
   override update(dt: number, ctx: EngineContext): void {
@@ -126,8 +154,13 @@ export class ProjectilePool extends Entity {
       _scale.set(r, r, r);
       _matrix.compose(_pos, _quat, _scale);
       this.instanced.setMatrixAt(i, _matrix);
+      const hr = r * ProjectilePool.HALO_SCALE;
+      _scale.set(hr, hr, hr);
+      _matrix.compose(_pos, _quat, _scale);
+      this.halo.setMatrixAt(i, _matrix);
     }
     this.instanced.instanceMatrix.needsUpdate = true;
+    this.halo.instanceMatrix.needsUpdate = true;
   }
 
   /**
@@ -147,13 +180,17 @@ export class ProjectilePool extends Entity {
         changed = true;
       }
     }
-    if (changed) this.instanced.instanceMatrix.needsUpdate = true;
+    if (changed) {
+      this.instanced.instanceMatrix.needsUpdate = true;
+      this.halo.instanceMatrix.needsUpdate = true;
+    }
   }
 
   private deactivate(i: number): void {
     this.active[i] = 0;
     _matrix.compose(_hidden, _quat, _zero);
     this.instanced.setMatrixAt(i, _matrix);
+    this.halo.setMatrixAt(i, _matrix);
   }
 
   private acquire(): number {

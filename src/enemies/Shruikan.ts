@@ -122,6 +122,7 @@ export class Shruikan extends Enemy implements MeleeAttacker {
     this.combo = new ComboStateMachine(CLAW_COMBO);
     const dragon = buildDragon('shruikan');
     dragon.scale.setScalar(SHRUIKAN.meshScale);
+    this.baseScale = SHRUIKAN.meshScale; // compose spawn-in / death-fade with his size
     this.mesh = dragon;
     this.dragonParts = dragonPartsOf(dragon);
     this.position.y = 32;
@@ -166,7 +167,7 @@ export class Shruikan extends Enemy implements MeleeAttacker {
   }
 
   /** Per-frame wing-beat — massive slow beats, big surge during a dive-swipe. */
-  override animate(dt: number): void {
+  protected override animateBody(dt: number): void {
     this.animT += dt;
     const diving = this.diveState === 'windup' || this.diveState === 'diving';
     const intensity = diving
@@ -352,6 +353,6 @@ export class Shruikan extends Enemy implements MeleeAttacker {
       ttl: 0.6,
       color: 0xff5a1a,
     });
-    getVfx()?.fireBurst(_spawn, 7);
+    getVfx()?.fireBreath(_spawn, _fwd, 13);
   }
 }

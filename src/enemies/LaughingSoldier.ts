@@ -118,6 +118,7 @@ export class LaughingSoldier extends Enemy implements MeleeAttacker {
    */
   override takeDamage(amount: number, _src?: Combatant, opts?: { finisher?: boolean }): void {
     if (!this.alive) return;
+    this.triggerHitFlash();
     if (this._staggered) {
       if (opts?.finisher) {
         this.health = 0;
@@ -157,7 +158,7 @@ export class LaughingSoldier extends Enemy implements MeleeAttacker {
    * skipped (the `staggered` flag rests body/weapon neutral) so it never fights
    * the think()-applied root squash that telegraphs the hunched, executable state.
    */
-  override animate(dt: number): void {
+  protected override animateBody(dt: number): void {
     if (!this.mesh) return;
     this.riderAnim.update(
       dt,

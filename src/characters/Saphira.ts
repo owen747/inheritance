@@ -138,7 +138,7 @@ export class Saphira extends Character implements MeleeAttacker {
   }
 
   /** Per-frame wing-beat — faster/deeper the harder she's driving (throttle). */
-  override animate(dt: number): void {
+  protected override animateBody(dt: number): void {
     this.animT += dt;
     const speedN =
       (this.throttle - FLIGHT.minSpeed) / Math.max(1e-3, FLIGHT.maxSpeed - FLIGHT.minSpeed);
@@ -173,6 +173,6 @@ export class Saphira extends Character implements MeleeAttacker {
       ttl: 0.55,
       color: 0xff7a1a,
     });
-    getVfx()?.fireBurst(_spawn, 6);
+    getVfx()?.fireBreath(_spawn, _fwd, 12);
   }
 }

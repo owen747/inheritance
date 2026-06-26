@@ -128,7 +128,9 @@ class WaveDirector {
     const alive: Enemy[] = [];
     for (const e of this.current) {
       if (e.alive && e.health > 0) alive.push(e);
-      else this.entities.remove(e); // they don't self-detach — clear corpses here
+      // Dead enemies drop from our tracking list (so the wave advances), but we do
+      // NOT entities.remove() them — that would skip the death-fade. The dying-aware
+      // EntityManager sweep disposes them after the shrink-out plays.
     }
     this.current = alive;
 

@@ -7,6 +7,7 @@ import * as THREE from 'three';
 import type { Combatant } from '../core/Entity';
 import type { EngineContext } from '../core/EngineContext';
 import { healHealth } from '../combat/Health';
+import { isKnockbackable } from '../combat/CombatSystem';
 import { ENERGY } from '../config/gameConfig';
 import { getVfx } from '../art/vfx';
 
@@ -71,13 +72,17 @@ function shockwave(
     if (!target.alive) continue;
     if (caster.position.distanceToSquared(target.position) > r2) continue;
     target.takeDamage(opts.damage, caster);
+    // Decaying impulse shove (not a teleport), matching the melee knockback model.
     _knock.copy(target.position).sub(caster.position);
     _knock.y = 0;
     if (_knock.lengthSq() < 1e-6) _knock.set(0, 0, 1);
     _knock.normalize();
-    target.position.addScaledVector(_knock, opts.knockback);
+    if (isKnockbackable(target)) target.applyKnockback(_knock.x, _knock.z, opts.knockback);
+    else target.position.addScaledVector(_knock, opts.knockback);
     getVfx()?.sparkBurst(target.position);
   }
+  // The signature: an expanding shockwave ring + a cyan air-compression puff.
+  getVfx()?.shockwaveRing(caster.position, 0xbfe6ff, { from: 0.5, to: opts.radius, life: 0.45, opacity: 0.85 });
   getVfx()?.burst(caster.position, { count: 24, color: 0xbfe6ff, speed: 10, life: 0.4, gravity: 2 });
 }
 
@@ -118,6 +123,8 @@ export const ALL_SPELLS: Spell[] = [
     kind: 'ward',
     effect: (caster) => {
       caster.wardHp = Math.max(caster.wardHp, ENERGY.wardHp);
+      // Ward-shell flash: a quick bright ring snapping up around the caster.
+      getVfx()?.shockwaveRing(caster.position, 0x4fe2ff, { from: 0.4, to: 2.6, life: 0.4, opacity: 0.9 });
       getVfx()?.burst(caster.position, { count: 20, color: 0x4fe2ff, speed: 4, life: 0.6, gravity: -1 });
     },
   },
@@ -131,6 +138,8 @@ export const ALL_SPELLS: Spell[] = [
     kind: 'heal',
     effect: (caster) => {
       healHealth(caster, 30);
+      // Heal aura: a gentle green ring + an upward shimmer of motes.
+      getVfx()?.shockwaveRing(caster.position, 0x8affc0, { from: 0.4, to: 2.2, life: 0.6, opacity: 0.55 });
       getVfx()?.burst(caster.position, { count: 18, color: 0x8affc0, speed: 3, life: 0.7, gravity: -2 });
     },
   },

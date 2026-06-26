@@ -67,6 +67,7 @@ export class ArmoredBrute extends Enemy implements MeleeAttacker {
     const rider = buildRider({ garb: 'ironDark', skin: 'eragonSkin' });
     rider.userData.weaponMount.add(buildHammer());
     rider.scale.setScalar(1.2);
+    this.baseScale = 1.2; // compose spawn-in / death-fade with his bulk
     this.mesh = rider;
     this.position.y = GROUND.groundY;
 
@@ -88,6 +89,7 @@ export class ArmoredBrute extends Enemy implements MeleeAttacker {
    */
   override takeDamage(amount: number, src?: Combatant, _opts?: { finisher?: boolean }): void {
     if (!this.alive) return;
+    this.triggerHitFlash();
     const scaled = src instanceof Roran ? amount : amount * ARMOR.nonRoranScale;
     damageThroughWard(this, scaled);
     if (this.health <= 0) this.die();
@@ -108,7 +110,7 @@ export class ArmoredBrute extends Enemy implements MeleeAttacker {
   }
 
   /** Per-frame walk bob + a big, slow combo-driven hammer swing. */
-  override animate(dt: number): void {
+  protected override animateBody(dt: number): void {
     if (!this.mesh) return;
     this.riderAnim.update(
       dt,

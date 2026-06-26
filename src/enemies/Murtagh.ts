@@ -114,7 +114,7 @@ export class Murtagh extends Enemy implements MeleeAttacker {
   }
 
   /** Per-frame walk bob + combo-driven sword swing. */
-  override animate(dt: number): void {
+  protected override animateBody(dt: number): void {
     if (!this.mesh) return;
     this.riderAnim.update(
       dt,

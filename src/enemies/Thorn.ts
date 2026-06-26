@@ -116,7 +116,7 @@ export class Thorn extends Enemy implements MeleeAttacker {
   }
 
   /** Per-frame wing-beat — a strong steady cruise, deeper while attacking/breathing. */
-  override animate(dt: number): void {
+  protected override animateBody(dt: number): void {
     this.animT += dt;
     const intensity = this.breathState === 'breathing' || this.combo.isAttacking ? 1.3 : 1.0;
     flapWings(this.dragonParts, this.animT, intensity);
@@ -225,6 +225,6 @@ export class Thorn extends Enemy implements MeleeAttacker {
       ttl: 0.55,
       color: 0xff5a1a,
     });
-    getVfx()?.fireBurst(_spawn, 6);
+    getVfx()?.fireBreath(_spawn, _fwd, 11);
   }
 }

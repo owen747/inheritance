@@ -36,12 +36,37 @@ export interface Hitstoppable {
   hitstop: number;
 }
 
+/**
+ * An entity that takes knockback as a DECAYING IMPULSE (a shove that slides to a
+ * stop) rather than an instant teleport. `dirX/dirZ` is a unit XZ direction away
+ * from the strike; `strength` is the strike's knockback value.
+ */
+export interface Knockbackable {
+  applyKnockback(dirX: number, dirZ: number, strength: number): void;
+}
+
 export function isMeleeAttacker(e: Entity): e is Entity & MeleeAttacker {
   return typeof (e as Partial<MeleeAttacker>).currentStrike === 'function';
 }
 
 export function isHitstoppable(e: object): e is Hitstoppable {
   return typeof (e as Partial<Hitstoppable>).hitstop === 'number';
+}
+
+export function isKnockbackable(e: object): e is Knockbackable {
+  return typeof (e as Partial<Knockbackable>).applyKnockback === 'function';
+}
+
+/**
+ * Hitstop scaled by hit weight: a base floor + a per-damage term + a finisher
+ * bonus, capped. Big hits FREEZE longer (more impact); a jab barely hitches.
+ */
+export function hitstopFor(damage: number, finisher: boolean): number {
+  const hs =
+    COMBAT.hitstop +
+    damage * COMBAT.hitstopPerDamage +
+    (finisher ? COMBAT.hitstopFinisher : 0);
+  return Math.min(COMBAT.hitstopMax, hs);
 }
 
 const _knock = new THREE.Vector3();
@@ -71,21 +96,28 @@ export class CombatSystem {
         const reach = strike.radius + target.collider.radius;
         if (strike.center.distanceToSquared(target.position) > reach * reach) continue;
 
+        const finisher = strike.finisher === true;
         strike.hitSet.add(target.id);
         target.takeDamage(strike.damage, isCombatant(attacker) ? attacker : undefined, {
-          finisher: strike.finisher === true,
+          finisher,
         });
 
-        // Knockback: shove the target away from the strike centre (XZ-biased).
+        // Knockback: shove the target away from the strike centre (XZ-biased) as a
+        // DECAYING IMPULSE — it slides to a stop instead of teleporting (a glitch).
+        // Finishers/heavy hits shove further. Fallback teleport only if the target
+        // isn't Knockbackable (e.g. a static turret).
         _knock.copy(target.position).sub(strike.center);
         _knock.y = 0;
         if (_knock.lengthSq() < 1e-6) _knock.set(0, 0, 1);
         _knock.normalize();
-        target.position.addScaledVector(_knock, strike.knockback);
+        const kb = strike.knockback * (finisher ? COMBAT.knockFinisherMul : 1);
+        if (isKnockbackable(target)) target.applyKnockback(_knock.x, _knock.z, kb);
+        else target.position.addScaledVector(_knock, kb);
 
-        // Mutual hitstop (brief freeze of both combatants).
-        applyHitstop(attacker, strike.hitstop);
-        applyHitstop(target, strike.hitstop);
+        // Mutual hitstop, scaled by hit weight (big hits freeze longer).
+        const hs = hitstopFor(strike.damage, finisher);
+        applyHitstop(attacker, hs);
+        applyHitstop(target, hs);
 
         getVfx()?.sparkBurst(strike.center);
         ctx.audio.play('melee-hit');

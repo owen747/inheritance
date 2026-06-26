@@ -470,14 +470,15 @@ export class UrubaenLevel implements Level {
 
   // -- Helpers ---------------------------------------------------------------
 
-  /** Remove dead members of a tracked enemy list (they don't self-detach). */
+  /**
+   * Drop dead members from a tracked enemy list so progression advances. We do NOT
+   * entities.remove() them — that would skip the death-fade; the dying-aware
+   * EntityManager sweep disposes them after the shrink-out plays.
+   */
   private reap(list: Enemy[]): void {
     for (let i = list.length - 1; i >= 0; i--) {
       const e = list[i];
-      if (!e.alive || e.health <= 0) {
-        this.entities?.remove(e);
-        list.splice(i, 1);
-      }
+      if (!e.alive || e.health <= 0) list.splice(i, 1);
     }
   }
 

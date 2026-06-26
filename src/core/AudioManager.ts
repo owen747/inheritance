@@ -117,25 +117,32 @@ export class AudioManager {
   private synth(id: SfxId, ctx: AudioContext, out: GainNode): void {
     switch (id) {
       case 'ui-click':
-        this.tone(ctx, out, { type: 'square', freq: 660, freqEnd: 520, dur: 0.06, gain: 0.25 });
+        // Soft muted tick (not a beep): a quick low sine blip + a faint noise edge.
+        this.tone(ctx, out, { type: 'sine', freq: 430, freqEnd: 300, dur: 0.05, gain: 0.16 });
+        this.noise(ctx, out, { dur: 0.025, gain: 0.07, cutoff: 2200 });
         break;
       case 'shout':
-        // Terse vocal chirp accompanying every spell shout.
-        this.tone(ctx, out, { type: 'sawtooth', freq: 280, freqEnd: 180, dur: 0.14, gain: 0.2 });
+        // Terse vocal chirp — triangle (less harsh than a saw) + slight pitch variation.
+        this.tone(ctx, out, { type: 'triangle', freq: this.vary(300, 0.1), freqEnd: 190, dur: 0.14, gain: 0.18 });
         break;
       case 'cast':
         // Rising magical whoosh.
         this.tone(ctx, out, { type: 'triangle', freq: 320, freqEnd: 880, dur: 0.28, gain: 0.3 });
         this.tone(ctx, out, { type: 'sine', freq: 640, freqEnd: 1320, dur: 0.22, gain: 0.18, delay: 0.02 });
         break;
-      case 'melee-hit':
-        this.tone(ctx, out, { type: 'square', freq: 150, freqEnd: 60, dur: 0.1, gain: 0.32 });
-        this.noise(ctx, out, { dur: 0.08, gain: 0.3, cutoff: 2400 });
+      case 'melee-hit': {
+        // Punchy thud: a soft low body (triangle, not square) with slight per-hit
+        // pitch variation + a short filtered-noise transient, so a flurry of swings
+        // doesn't sound identical and the hit reads weighty rather than harsh.
+        const body = this.vary(135, 0.18);
+        this.tone(ctx, out, { type: 'triangle', freq: body, freqEnd: body * 0.45, dur: 0.11, gain: 0.3 });
+        this.noise(ctx, out, { dur: 0.07, gain: 0.34, cutoff: this.vary(1500, 0.25), cutoffEnd: 480 });
         break;
+      }
       case 'fire':
       case 'fire-breath':
-        this.noise(ctx, out, { dur: 0.34, gain: 0.28, cutoff: 1400, cutoffEnd: 600 });
-        this.tone(ctx, out, { type: 'sawtooth', freq: 120, freqEnd: 70, dur: 0.3, gain: 0.12 });
+        this.noise(ctx, out, { dur: 0.34, gain: 0.28, cutoff: this.vary(1400, 0.18), cutoffEnd: 600 });
+        this.tone(ctx, out, { type: 'sawtooth', freq: this.vary(120, 0.14), freqEnd: 70, dur: 0.3, gain: 0.12 });
         break;
       case 'death':
         // Heavy descending fall + impact noise.
@@ -183,6 +190,11 @@ export class AudioManager {
         // Unknown id: stay silent rather than throw.
         break;
     }
+  }
+
+  /** Multiply a value by a small random factor (±amount/2) for per-hit variation. */
+  private vary(value: number, amount: number): number {
+    return value * (1 + (Math.random() - 0.5) * amount);
   }
 
   private tone(ctx: AudioContext, out: GainNode, spec: ToneSpec): void {

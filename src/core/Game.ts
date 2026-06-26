@@ -9,6 +9,7 @@ import { SaveManager } from './SaveManager';
 import { DebugOverlay } from '../ui/DebugOverlay';
 import { HUD, EMPTY_HUD_INFO, type HudInfoProvider } from '../ui/HUD';
 import { Menus } from '../ui/Menus';
+import { Transition } from '../ui/Transition';
 import { CombatSystem } from '../combat/CombatSystem';
 import { createLevel, type Level } from '../world/Level';
 import type { ControlMode } from './Input';
@@ -53,6 +54,7 @@ export class Game {
   private readonly overlay: DebugOverlay;
   private readonly hud: HUD;
   private readonly menus: Menus;
+  private readonly transition: Transition;
   private readonly combat = new CombatSystem();
 
   private phase: Phase = 'TITLE';
@@ -98,6 +100,7 @@ export class Game {
     });
 
     this.hud = new HUD(uiRoot);
+    this.transition = new Transition(uiRoot);
     this.menus = new Menus(uiRoot, {
       onStart: () => {
         // Fallback: start whichever level is currently booted (e.g. via #hash).
@@ -166,6 +169,9 @@ export class Game {
     const order = CAMPAIGN.findIndex((l) => l.id === this.currentLevelId);
     const next = order >= 0 ? CAMPAIGN[order + 1] : undefined;
     if (next) {
+      // Cover the boot->play hand-off with black so the main menu never flashes
+      // between levels; the reveal fires once PLAYING begins (in setPhase).
+      this.beginCoveredTransition();
       this.bootInto(next.id);
       this.setPhase('TITLE');
       this.requestPlay();
@@ -183,9 +189,24 @@ export class Game {
    * regardless of the phase we came from (TITLE menu, or LOST on Retry).
    */
   startLevel(id: string): void {
+    // Cover the menu->play hand-off so the title/lose screen doesn't flash.
+    this.beginCoveredTransition();
     this.bootInto(id);
     this.setPhase('TITLE');
     this.requestPlay();
+  }
+
+  /**
+   * Snap a black veil over the screen and schedule a safety reveal: the seamless
+   * boot->play hand-off must stay in this user gesture, so we cover instantly and
+   * let PLAYING (via setPhase) reveal. If pointer-lock never engages, the fallback
+   * un-covers so the player isn't stranded behind black.
+   */
+  private beginCoveredTransition(): void {
+    this.transition.cover();
+    window.setTimeout(() => {
+      if (this.phase !== 'PLAYING') this.transition.reveal();
+    }, 1200);
   }
 
   /** Main-menu New Game: wipe all progression and return to a fresh Level 1 menu. */
@@ -272,6 +293,8 @@ export class Game {
       case 'PLAYING':
         this.acc = 0;
         this.last = performance.now();
+        // Reveal from any level-transition cover now that play has begun.
+        this.transition.reveal();
         break;
       case 'PAUSED':
         this.exitLock();

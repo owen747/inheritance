@@ -30,6 +30,11 @@ export interface BurstOptions {
 
 const _color = new THREE.Color();
 
+/** Number of pooled shockwave rings (expanding+fading torus-like rings). */
+const RING_COUNT = 12;
+/** Forward axis for a stretched fire-jet emission. */
+const _jet = new THREE.Vector3();
+
 /**
  * Owns one pooled `THREE.Points` cloud. An `Entity` so the game loop ticks its
  * `update(dt)` and the renderer disposes its geometry/material on level unload.
@@ -49,6 +54,18 @@ export class VfxSystem extends Entity {
   private readonly geometry: THREE.BufferGeometry;
   private readonly posAttr: THREE.BufferAttribute;
   private readonly colorAttr: THREE.BufferAttribute;
+
+  // --- Pooled shockwave rings (one shared geometry, per-ring material) ---------
+  private readonly ringGeometry: THREE.RingGeometry;
+  private readonly ringMeshes: THREE.Mesh[] = [];
+  private readonly ringMats: THREE.MeshBasicMaterial[] = [];
+  private readonly ringAge = new Float32Array(RING_COUNT);
+  private readonly ringLife = new Float32Array(RING_COUNT);
+  private readonly ringFrom = new Float32Array(RING_COUNT);
+  private readonly ringTo = new Float32Array(RING_COUNT);
+  private readonly ringOpacity = new Float32Array(RING_COUNT);
+  private readonly ringActive = new Uint8Array(RING_COUNT);
+  private ringCursor = 0;
 
   constructor(capacity = 600) {
     super();
@@ -83,7 +100,34 @@ export class VfxSystem extends Entity {
 
     const points = new THREE.Points(this.geometry, material);
     points.frustumCulled = false;
-    this.mesh = points;
+
+    // Root group holds the point cloud AND the pooled shockwave rings, so all of
+    // VFX's unique (non-cached) geometry/materials are disposed together by the
+    // EntityManager on level unload (it traverses this.mesh).
+    const root = new THREE.Group();
+    root.add(points);
+
+    // A thin flat ring lying in the XZ plane (expanded per-instance on emit).
+    this.ringGeometry = new THREE.RingGeometry(0.86, 1.0, 40);
+    for (let i = 0; i < RING_COUNT; i++) {
+      const mat = new THREE.MeshBasicMaterial({
+        color: 0xffffff,
+        transparent: true,
+        opacity: 0,
+        depthWrite: false,
+        side: THREE.DoubleSide,
+        blending: THREE.AdditiveBlending,
+      });
+      const ring = new THREE.Mesh(this.ringGeometry, mat);
+      ring.rotation.x = -Math.PI / 2; // lie flat on the ground plane
+      ring.visible = false;
+      ring.frustumCulled = false;
+      this.ringMeshes.push(ring);
+      this.ringMats.push(mat);
+      root.add(ring);
+    }
+
+    this.mesh = root;
     this.collider = { radius: 0 };
   }
 
@@ -133,6 +177,63 @@ export class VfxSystem extends Entity {
     this.burst(position, { count, color: 0xfff2a0, speed: 8, speedJitter: 6, life: 0.3, gravity: 14 });
   }
 
+  /**
+   * A dense, forward-STRETCHED fire jet at a maw/muzzle — particles biased along
+   * `dir` (with spread) so it reads as flame rather than a puff of dots. Pooled +
+   * allocation-free (reuses the particle ring buffer).
+   */
+  fireBreath(position: THREE.Vector3, dir: THREE.Vector3, count = 14): void {
+    _jet.copy(dir);
+    if (_jet.lengthSq() < 1e-6) _jet.set(0, 0, -1);
+    _jet.normalize();
+    _color.set(Math.random() < 0.5 ? 0xff8a1e : 0xffd24a);
+    for (let n = 0; n < count; n++) {
+      const i = this.cursor;
+      this.cursor = (this.cursor + 1) % this.capacity;
+      const i3 = i * 3;
+      this.positions[i3] = position.x;
+      this.positions[i3 + 1] = position.y;
+      this.positions[i3 + 2] = position.z;
+      const sp = 10 + Math.random() * 14;
+      this.velX[i] = _jet.x * sp + (Math.random() - 0.5) * 5;
+      this.velY[i] = _jet.y * sp + (Math.random() - 0.5) * 5;
+      this.velZ[i] = _jet.z * sp + (Math.random() - 0.5) * 5;
+      this.colors[i3] = _color.r;
+      this.colors[i3 + 1] = _color.g;
+      this.colors[i3 + 2] = _color.b;
+      this.life[i] = 0.28 + Math.random() * 0.22;
+      this.gravity[i] = -3; // float up slightly like rising flame
+    }
+  }
+
+  /**
+   * An expanding + fading ring (shockwave) centred at `center`. Pooled: reuses one
+   * of {@link RING_COUNT} ring meshes (oldest recycled). `from`/`to` are the start
+   * and end radii; the ring fades out over `life` seconds. Allocation-free.
+   */
+  shockwaveRing(
+    center: THREE.Vector3,
+    color = 0xffffff,
+    opts: { from?: number; to?: number; life?: number; opacity?: number } = {},
+  ): void {
+    const i = this.ringCursor;
+    this.ringCursor = (this.ringCursor + 1) % RING_COUNT;
+    const ring = this.ringMeshes[i];
+    const mat = this.ringMats[i];
+    ring.position.set(center.x, center.y + 0.15, center.z);
+    ring.visible = true;
+    mat.color.set(color);
+    this.ringActive[i] = 1;
+    this.ringAge[i] = 0;
+    this.ringLife[i] = opts.life ?? 0.5;
+    this.ringFrom[i] = opts.from ?? 0.5;
+    this.ringTo[i] = opts.to ?? 7;
+    this.ringOpacity[i] = opts.opacity ?? 0.8;
+    const s = this.ringFrom[i];
+    ring.scale.set(s, s, s);
+    mat.opacity = this.ringOpacity[i];
+  }
+
   override update(dt: number, _ctx: EngineContext): void {
     for (let i = 0; i < this.capacity; i++) {
       if (this.life[i] <= 0) continue;
@@ -149,6 +250,23 @@ export class VfxSystem extends Entity {
     }
     this.posAttr.needsUpdate = true;
     this.colorAttr.needsUpdate = true;
+
+    // Pooled shockwave rings: expand the radius + fade opacity, then park.
+    for (let i = 0; i < RING_COUNT; i++) {
+      if (this.ringActive[i] === 0) continue;
+      this.ringAge[i] += dt;
+      const t = this.ringAge[i] / this.ringLife[i];
+      if (t >= 1) {
+        this.ringActive[i] = 0;
+        this.ringMeshes[i].visible = false;
+        this.ringMats[i].opacity = 0;
+        continue;
+      }
+      const eased = 1 - (1 - t) * (1 - t); // ease-out expansion
+      const r = this.ringFrom[i] + (this.ringTo[i] - this.ringFrom[i]) * eased;
+      this.ringMeshes[i].scale.set(r, r, r);
+      this.ringMats[i].opacity = this.ringOpacity[i] * (1 - t);
+    }
   }
 }
 
