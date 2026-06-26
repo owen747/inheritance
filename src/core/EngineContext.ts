@@ -23,6 +23,8 @@ export interface SaveLike {
   collect(id: string): void;
   /** Idempotently record a cleared level (and persist, for the real manager). */
   markLevelCleared(id: string): void;
+  /** Wipe all progression (New Game). */
+  reset(): void;
 }
 
 /** In-memory `SaveLike` (no persistence). Used for tests / as a safe fallback. */
@@ -43,6 +45,11 @@ export function createStubSave(): SaveLike {
     },
     markLevelCleared(id: string): void {
       if (!levelsCleared.includes(id)) levelsCleared.push(id);
+    },
+    reset(): void {
+      eldunariCollected.length = 0;
+      unlockedSpells.length = 0;
+      levelsCleared.length = 0;
     },
   };
 }

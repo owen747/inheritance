@@ -15,6 +15,25 @@ import type { ControlMode } from './Input';
 
 export type Phase = 'TITLE' | 'PLAYING' | 'PAUSED' | 'WON' | 'LOST';
 
+/** A single campaign level as surfaced to the main-menu level-select. */
+export interface LevelMenuItem {
+  id: string;
+  title: string;
+  /** 0-based position in the campaign order (display as `Level {index + 1}`). */
+  index: number;
+  /** True once this level has been beaten (shows a ✓). */
+  cleared: boolean;
+  /** True if the level may be selected (Level 1, cleared, next-after-cleared, or booted). */
+  unlocked: boolean;
+}
+
+/** Canonical campaign order + display titles. The dev sandbox is NOT a campaign level. */
+const CAMPAIGN: ReadonlyArray<{ id: string; title: string }> = [
+  { id: 'aerial-duel', title: 'The Aerial Duel' },
+  { id: 'siege', title: 'Siege of Dras-Leona' },
+  { id: 'urubaen', title: 'Assault on Urûʼbaen' },
+];
+
 const STEP = 1 / 60;
 const MAX_FRAME = 0.25; // clamp accumulated time -> no spiral of death
 
@@ -79,6 +98,7 @@ export class Game {
     this.hud = new HUD(uiRoot);
     this.menus = new Menus(uiRoot, {
       onStart: () => {
+        // Fallback: start whichever level is currently booted (e.g. via #hash).
         this.audio.play('ui-click');
         this.requestPlay();
       },
@@ -87,13 +107,24 @@ export class Game {
         this.requestPlay();
       },
       onRetry: () => {
+        // Retry on lose: re-boot the SAME level and jump straight back into play
+        // (the Retry click is a live user gesture, so requestPlay grabs pointer-lock).
         this.audio.play('ui-click');
-        this.restart();
+        if (this.currentLevelId) this.startLevel(this.currentLevelId);
       },
       onContinue: () => {
         this.audio.play('ui-click');
-        this.restart();
+        this.advanceOrFinish();
       },
+      onSelectLevel: (id) => {
+        this.audio.play('ui-click');
+        this.startLevel(id);
+      },
+      onNewGame: () => {
+        this.audio.play('ui-click');
+        this.newGame();
+      },
+      getLevelCatalog: () => this.getLevelCatalog(),
     });
 
     document.addEventListener('pointerlockchange', this.onPointerLockChange);
@@ -123,10 +154,62 @@ export class Game {
     this.hudProvider = provider;
   }
 
-  /** Restart the current level and return to the title (Retry / Continue). */
-  private restart(): void {
-    if (this.currentLevelId) this.bootInto(this.currentLevelId);
+  /**
+   * Win-screen Continue: boot the next campaign level and play it seamlessly, or
+   * return to the menu after the finale. The Continue click is the user gesture, so
+   * `requestPlay()` here grabs pointer-lock; `bootInto` leaves the phase untouched,
+   * so we force TITLE first and let `onPointerLockChange` drive TITLE -> PLAYING.
+   */
+  private advanceOrFinish(): void {
+    const order = CAMPAIGN.findIndex((l) => l.id === this.currentLevelId);
+    const next = order >= 0 ? CAMPAIGN[order + 1] : undefined;
+    if (next) {
+      this.bootInto(next.id);
+      this.setPhase('TITLE');
+      this.requestPlay();
+    } else {
+      // Finished the campaign (urubaen): the win overlay already showed the
+      // Fírnen epilogue — return to the main menu.
+      this.setPhase('TITLE');
+    }
+  }
+
+  /**
+   * Start a campaign level straight from a user-gesture handler (main-menu
+   * level-select OR Retry on lose). We force TITLE before `requestPlay()` so the
+   * lock-acquire reliably transitions -> PLAYING via `onPointerLockChange`
+   * regardless of the phase we came from (TITLE menu, or LOST on Retry).
+   */
+  startLevel(id: string): void {
+    this.bootInto(id);
     this.setPhase('TITLE');
+    this.requestPlay();
+  }
+
+  /** Main-menu New Game: wipe all progression and return to a fresh Level 1 menu. */
+  newGame(): void {
+    this.ctx.save.reset();
+    this.bootInto('aerial-duel');
+    this.setPhase('TITLE');
+  }
+
+  /**
+   * Build the level-select catalog. A level is unlocked if it is the first level,
+   * has been cleared, follows a cleared level, or is the currently-booted level
+   * (so a `#hash`-booted level is playable from the menu).
+   */
+  getLevelCatalog(): LevelMenuItem[] {
+    const cleared = this.ctx.save.levelsCleared;
+    return CAMPAIGN.map((level, index) => {
+      const prevCleared = index > 0 && cleared.includes(CAMPAIGN[index - 1].id);
+      return {
+        id: level.id,
+        title: level.title,
+        index,
+        cleared: cleared.includes(level.id),
+        unlocked: index === 0 || prevCleared || level.id === this.currentLevelId,
+      };
+    });
   }
 
   setActiveEntity(entity: Entity | null): void {

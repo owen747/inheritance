@@ -300,3 +300,97 @@
 .menu__btn:active {
   transform: translateY(1px);
 }
+
+.menu__btn--small {
+  padding: 8px 24px;
+  font-size: 14px;
+  letter-spacing: 0.06em;
+}
+
+/* ---- Main-menu level select ----------------------------------------------- */
+
+.menu__panel--title {
+  gap: 14px;
+  max-width: 560px;
+}
+
+.menu__levels {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  width: 100%;
+  margin-top: 6px;
+}
+
+.menu__level {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  width: 100%;
+  padding: 12px 18px;
+  font-family: inherit;
+  font-size: 16px;
+  letter-spacing: 0.03em;
+  text-align: left;
+  color: var(--col-ink);
+  background: rgba(10, 14, 22, 0.7);
+  border: 1px solid var(--panel-border);
+  border-radius: 6px;
+  cursor: pointer;
+  transition: transform 80ms ease, border-color 120ms ease, background 120ms ease;
+}
+
+.menu__level:hover:not(.is-locked) {
+  transform: translateX(2px);
+  border-color: var(--col-gold);
+  background: rgba(28, 24, 14, 0.78);
+}
+
+.menu__level.is-cleared {
+  border-color: rgba(138, 255, 192, 0.5);
+}
+
+.menu__level.is-locked {
+  cursor: not-allowed;
+  opacity: 0.4;
+  color: rgba(234, 242, 255, 0.6);
+}
+
+.menu__level-name {
+  flex: 1;
+}
+
+.menu__level-tag {
+  font-weight: 700;
+  color: #8affc0;
+  letter-spacing: 0.04em;
+}
+
+.menu__level.is-locked .menu__level-tag {
+  color: rgba(234, 242, 255, 0.6);
+  font-weight: 600;
+  font-size: 13px;
+}
+
+/* ---- Controls legend ------------------------------------------------------ */
+
+.menu__controls {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 6px 14px;
+  margin-top: 6px;
+  max-width: 520px;
+  font-size: 12px;
+  opacity: 0.78;
+}
+
+.menu__control {
+  white-space: nowrap;
+}
+
+.menu__control b {
+  color: var(--col-gold);
+  font-weight: 700;
+}
