@@ -18,6 +18,17 @@ const SWORD_COMBO: ComboConfig = {
     { windup: 0.12, active: 0.16, recovery: 0.38, damage: 24, knockback: 2.2, range: 2.1, radius: 1.15 },
   ],
   bufferTime: COMBAT.comboBuffer,
+  // Heavy finisher: slower windup, bigger reach/damage, executes staggered elites.
+  heavyStep: {
+    windup: 0.35,
+    active: 0.12,
+    recovery: 0.45,
+    damage: 30,
+    knockback: 3.0,
+    range: 2.4,
+    radius: 1.25,
+    finisher: true,
+  },
 };
 
 const SPELL_SLOTS: InputAction[] = ['spell1', 'spell2', 'spell3', 'spell4'];

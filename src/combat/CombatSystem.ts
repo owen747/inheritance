@@ -17,6 +17,8 @@ export interface MeleeStrike {
   damage: number;
   knockback: number;
   hitstop: number;
+  /** True when this swing is a finisher (heavy attack) — executes staggered elites. */
+  finisher?: boolean;
   /** Entity ids already struck this active window (owned by the attacker's combo). */
   hitSet: Set<number>;
 }
@@ -68,7 +70,9 @@ export class CombatSystem {
         if (strike.center.distanceToSquared(target.position) > reach * reach) continue;
 
         strike.hitSet.add(target.id);
-        target.takeDamage(strike.damage, isCombatant(attacker) ? attacker : undefined);
+        target.takeDamage(strike.damage, isCombatant(attacker) ? attacker : undefined, {
+          finisher: strike.finisher === true,
+        });
 
         // Knockback: shove the target away from the strike centre (XZ-biased).
         _knock.copy(target.position).sub(strike.center);

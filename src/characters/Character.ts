@@ -23,7 +23,7 @@ import { ENERGY, GROUND, COMBAT } from '../config/gameConfig';
 export type { ControlMode } from '../core/Input';
 
 /** Input actions whose per-step rising edge characters consume. */
-const EDGE_ACTIONS: InputAction[] = ['attack', 'dodge', 'spell1', 'spell2', 'spell3', 'spell4'];
+const EDGE_ACTIONS: InputAction[] = ['attack', 'heavy', 'dodge', 'spell1', 'spell2', 'spell3', 'spell4'];
 
 const UP = new THREE.Vector3(0, 1, 0);
 
@@ -46,6 +46,13 @@ export abstract class Character extends Entity {
   maxEnergy: number;
   energy: number;
   wardHp = 0;
+
+  /**
+   * Incoming-damage multiplier applied in {@link takeDamage} (after the
+   * invulnerable guard, before ward/health). 1 = normal; Roran lowers it for
+   * toughness. NOT applied in Health.ts.
+   */
+  damageTakenScale = 1;
 
   /** Brief freeze applied by the CombatSystem on a clean hit. */
   hitstop = 0;
@@ -115,8 +122,9 @@ export abstract class Character extends Entity {
     this.onShout?.(word);
   }
 
-  takeDamage(amount: number, _src?: Entity): void {
+  takeDamage(amount: number, _src?: Entity, _opts?: { finisher?: boolean }): void {
     if (this.invulnerable) return;
+    amount *= this.damageTakenScale;
     const wardBefore = this.wardHp;
     damageThroughWard(this, amount);
     if (wardBefore > 0 && this.wardHp === 0) this.audio?.play('ward-break');
@@ -217,6 +225,8 @@ export abstract class GroundCharacter extends Character implements MeleeAttacker
     this.strike.damage = step.damage;
     this.strike.knockback = step.knockback;
     this.strike.team = this.team;
+    // Strike object is REUSED — set unconditionally so a prior heavy never latches.
+    this.strike.finisher = step.finisher === true;
     return this.strike;
   }
 
@@ -225,8 +235,9 @@ export abstract class GroundCharacter extends Character implements MeleeAttacker
     this.yaw -= this.input.axis('yaw') * GROUND.turnRate;
     this.quaternion.setFromAxisAngle(UP, this.yaw);
 
-    // Combo + dodge edges.
+    // Combo + dodge + heavy edges.
     if (this.justPressedStep('dodge')) this.combo.pressDodge();
+    else if (this.justPressedStep('heavy')) this.combo.pressHeavy();
     else if (this.justPressedStep('attack')) this.combo.pressAttack();
     this.combo.update(dt);
 

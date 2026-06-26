@@ -36,6 +36,8 @@ export class Input {
     window.addEventListener('mouseup', this.onMouseUp);
     window.addEventListener('mousemove', this.onMouseMove);
     window.addEventListener('blur', this.onBlur);
+    // Right-click (Mouse2 = heavy/finisher) must never pop the browser menu in play.
+    window.addEventListener('contextmenu', this.onContextMenu);
   }
 
   setMode(mode: ControlMode): void {
@@ -120,6 +122,7 @@ export class Input {
     window.removeEventListener('mouseup', this.onMouseUp);
     window.removeEventListener('mousemove', this.onMouseMove);
     window.removeEventListener('blur', this.onBlur);
+    window.removeEventListener('contextmenu', this.onContextMenu);
   }
 
   private digital(positive: InputAction, negative: InputAction): number {
@@ -150,6 +153,10 @@ export class Input {
       this.mouseDX += event.movementX;
       this.mouseDY += event.movementY;
     }
+  };
+
+  private readonly onContextMenu = (event: MouseEvent): void => {
+    event.preventDefault();
   };
 
   private readonly onBlur = (): void => {

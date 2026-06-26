@@ -22,9 +22,12 @@ const game = new Game(canvas, uiRoot);
 // their factories close over the game instance. The L2/L3 stubs need neither.
 registerLevel('aerial-duel', () => new AerialDuelLevel(game.input, game));
 registerLevel('dev-sandbox', () => new DevSandboxLevel(game.input, game));
-registerLevel('siege', () => new SiegeLevel());
+registerLevel('siege', () => new SiegeLevel(game.input, game));
 registerLevel('urubaen', () => new UrubaenLevel());
 
 // Boot into the real Level 1: TITLE screen -> Start -> Phase 1 (Sky).
-game.bootInto('aerial-duel');
+// Dev affordance: load the page with the URL hash `#siege` to jump straight into
+// Level 2 for playtesting (Phase 1 Sky), skipping Level 1. Default stays L1.
+const bootLevel = location.hash === '#siege' ? 'siege' : 'aerial-duel';
+game.bootInto(bootLevel);
 game.start();

@@ -18,6 +18,8 @@ export interface ComboStep {
   range: number;
   /** Hit sphere radius. */
   radius: number;
+  /** True for a heavy/finisher swing (executes staggered elites). */
+  finisher?: boolean;
 }
 
 export interface ComboConfig {
@@ -26,6 +28,12 @@ export interface ComboConfig {
   rollDuration?: number;
   rollIFrames?: number;
   rollSpeed?: number;
+  /**
+   * Optional STANDALONE heavy swing. Entered via {@link ComboStateMachine.pressHeavy};
+   * it is NOT part of `steps[]`, cannot be chain-buffered from normal swings, and
+   * normal combos cannot buffer into it. Typically `finisher: true`.
+   */
+  heavyStep?: ComboStep;
 }
 
 /**
@@ -37,6 +45,7 @@ export class ComboStateMachine {
   state: ComboState = 'IDLE';
 
   private readonly steps: ComboStep[];
+  private readonly heavyStep: ComboStep | null;
   private readonly bufferTime: number;
   readonly rollDuration: number;
   readonly rollIFrames: number;
@@ -47,6 +56,8 @@ export class ComboStateMachine {
   private buffered = false;
   private bufferAge = 0;
   private rollTimer = 0;
+  /** True while the standalone heavy swing owns WINDUP/ACTIVE/RECOVERY (not in steps[]). */
+  private heavy = false;
 
   /** Entity ids already struck during the CURRENT active window (no double-hit). */
   readonly hitSet = new Set<number>();
@@ -56,6 +67,7 @@ export class ComboStateMachine {
       throw new Error('ComboStateMachine requires at least one step.');
     }
     this.steps = config.steps;
+    this.heavyStep = config.heavyStep ?? null;
     this.bufferTime = config.bufferTime ?? COMBAT.comboBuffer;
     this.rollDuration = config.rollDuration ?? COMBAT.rollDuration;
     this.rollIFrames = config.rollIFrames ?? COMBAT.rollIFrames;
@@ -74,6 +86,22 @@ export class ComboStateMachine {
   }
 
   /**
+   * Enter the STANDALONE heavy swing directly. Ignored during ROLL (roll has
+   * commitment) and when no heavyStep is configured. It does NOT chain from
+   * `steps[]` and cannot be buffered into; it interrupts the current normal swing.
+   */
+  pressHeavy(): void {
+    if (this.state === 'ROLL') return;
+    if (!this.heavyStep) return;
+    this.heavy = true;
+    this.stepIndex = -1;
+    this.buffered = false;
+    this.state = 'WINDUP';
+    this.timer = this.heavyStep.windup;
+    this.hitSet.clear();
+  }
+
+  /**
    * Attempt to cancel the current action into a dodge-roll. Always allowed except
    * mid-roll. Returns true if a roll started.
    */
@@ -82,6 +110,7 @@ export class ComboStateMachine {
     this.state = 'ROLL';
     this.rollTimer = this.rollDuration;
     this.stepIndex = -1;
+    this.heavy = false;
     this.buffered = false;
     this.hitSet.clear();
     return true;
@@ -107,7 +136,7 @@ export class ComboStateMachine {
     this.timer -= dt;
     if (this.timer > 0) return;
 
-    const step = this.steps[this.stepIndex];
+    const step = this.heavy ? this.heavyStep! : this.steps[this.stepIndex];
     if (this.state === 'WINDUP') {
       this.state = 'ACTIVE';
       this.timer = step.active;
@@ -116,6 +145,14 @@ export class ComboStateMachine {
       this.state = 'RECOVERY';
       this.timer = step.recovery;
     } else if (this.state === 'RECOVERY') {
+      if (this.heavy) {
+        // Heavy is standalone: never chains; back to IDLE after recovery.
+        this.heavy = false;
+        this.buffered = false;
+        this.state = 'IDLE';
+        this.stepIndex = -1;
+        return;
+      }
       const next = this.stepIndex + 1;
       if (this.buffered && next < this.steps.length) {
         this.buffered = false;
@@ -129,7 +166,8 @@ export class ComboStateMachine {
 
   /** The step whose hit sphere is live RIGHT NOW, else null. */
   get activeStep(): ComboStep | null {
-    return this.state === 'ACTIVE' ? this.steps[this.stepIndex] : null;
+    if (this.state !== 'ACTIVE') return null;
+    return this.heavy ? this.heavyStep : this.steps[this.stepIndex];
   }
 
   get isBusy(): boolean {

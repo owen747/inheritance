@@ -46,6 +46,8 @@ function resolve(options: FlatMaterialOptions): ResolvedOptions {
 }
 
 const cache = new Map<string, THREE.MeshStandardMaterial>();
+/** Identity set of every material the cache owns — for O(1) shared-ownership checks. */
+const cachedInstances = new Set<THREE.Material>();
 
 function cacheKey(color: number, o: ResolvedOptions): string {
   return [
@@ -87,7 +89,17 @@ export function flatMaterial(color: number, options: FlatMaterialOptions = {}): 
     side: o.doubleSide ? THREE.DoubleSide : THREE.FrontSide,
   });
   cache.set(key, mat);
+  cachedInstances.add(mat);
   return mat;
+}
+
+/**
+ * True if `m` is a shared cached material. Per-entity teardown (EntityManager)
+ * MUST NOT dispose these — many living meshes share one instance; they are freed
+ * once, globally, by {@link disposeMaterials}.
+ */
+export function isCachedMaterial(m: THREE.Material): boolean {
+  return cachedInstances.has(m);
 }
 
 /** Convenience: cached flat material from a palette {@link ColorKey}. */
@@ -113,4 +125,5 @@ export function materialCacheSize(): number {
 export function disposeMaterials(): void {
   for (const mat of cache.values()) mat.dispose();
   cache.clear();
+  cachedInstances.clear();
 }

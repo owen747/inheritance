@@ -20,13 +20,25 @@ import { materialFor, glowMaterial } from './materials';
 // scale/position/rotate their own object, never mutate shared geometry.
 // ----------------------------------------------------------------------------
 const geoCache = new Map<string, THREE.BufferGeometry>();
+/** Identity set of every geometry the cache owns — for O(1) shared-ownership checks. */
+const cachedGeometries = new Set<THREE.BufferGeometry>();
 
 function cached(key: string, make: () => THREE.BufferGeometry): THREE.BufferGeometry {
   const hit = geoCache.get(key);
   if (hit) return hit;
   const g = make();
   geoCache.set(key, g);
+  cachedGeometries.add(g);
   return g;
+}
+
+/**
+ * True if `g` is a shared cached geometry. Per-entity teardown (EntityManager)
+ * MUST NOT dispose these — many living meshes share one instance; they are freed
+ * once, globally, by {@link disposeGeometryCache}.
+ */
+export function isCachedGeometry(g: THREE.BufferGeometry): boolean {
+  return cachedGeometries.has(g);
 }
 
 function box(w: number, h: number, d: number): THREE.BufferGeometry {
@@ -46,6 +58,7 @@ function ico(r: number, detail = 0): THREE.BufferGeometry {
 export function disposeGeometryCache(): void {
   for (const g of geoCache.values()) g.dispose();
   geoCache.clear();
+  cachedGeometries.clear();
 }
 
 // ----------------------------------------------------------------------------
@@ -358,5 +371,239 @@ export function buildCitySilhouette(spanX = 120, count = 18): THREE.Group {
       g.add(ember);
     }
   }
+  return g;
+}
+
+// ----------------------------------------------------------------------------
+// Siege of Dras-Leona — urban set pieces (walls, gate, buildings, banners,
+// the Helgrind backdrop, rooftop perches). All faceted, shared geometry, -Z
+// forward. The caller (world/Siege.ts) positions/rotates whole groups.
+// ----------------------------------------------------------------------------
+
+/**
+ * A crenellated rampart segment lying along ±X, its inner/outer faces toward ±Z.
+ * `length` spans X, `height` spans Y (base at y=0). Merlons line the top.
+ */
+export function buildWall(length = 12, height = 6): THREE.Group {
+  const g = new THREE.Group();
+  g.name = 'wall';
+  const thickness = 1.4;
+
+  // Main rampart body + a darker, slightly proud base course.
+  g.add(piece(box(length, height, thickness), 'wallStone', { pos: [0, height / 2, 0] }));
+  g.add(piece(box(length + 0.2, height * 0.22, thickness + 0.3), 'wallStoneDark', { pos: [0, height * 0.11, 0] }));
+
+  // Crenellations (merlons) evenly spaced across the top with gaps between.
+  const merlonW = 1.0;
+  const merlonH = 0.9;
+  const step = merlonW + 0.8;
+  const count = Math.max(1, Math.floor(length / step));
+  const startX = -((count - 1) * step) / 2;
+  for (let i = 0; i < count; i++) {
+    g.add(piece(box(merlonW, merlonH, thickness), 'wallStone', { pos: [startX + i * step, height + merlonH / 2, 0] }));
+  }
+  return g;
+}
+
+/** Handles attached to a gate group's userData. */
+export interface GateParts {
+  /** The two closed door leaves blocking the opening — remove these on breach. */
+  doors: THREE.Group;
+  /** Rubble pile shown in the gap once breached. */
+  rubble: THREE.Group;
+}
+
+/**
+ * A walled gate: two flanking towers + a lintel over a central opening, facing
+ * -Z. The opening is filled by a `doors` group (intact) and a `rubble` group
+ * (the breached gap); exactly one is visible per {@link breached}. Both are on
+ * userData ({@link GateParts}) so a breach cutscene can hide/remove the doors
+ * and reveal the rubble.
+ */
+export function buildGate(breached = false): THREE.Group {
+  const g = new THREE.Group();
+  g.name = 'gate';
+
+  const towerH = 8;
+  const towerW = 2.4;
+  const towerD = 2.4;
+  const openW = 4.5;
+  const halfOpen = openW / 2;
+  const lintelY = 6.2;
+
+  // Flanking towers with dark caps.
+  for (const side of [-1, 1] as const) {
+    const cx = side * (halfOpen + towerW / 2);
+    g.add(piece(box(towerW, towerH, towerD), 'wallStone', { pos: [cx, towerH / 2, 0] }));
+    g.add(piece(box(towerW + 0.4, 0.6, towerD + 0.4), 'wallStoneDark', { pos: [cx, towerH + 0.3, 0] }));
+    // A couple of merlons per tower cap.
+    g.add(piece(box(0.7, 0.7, towerD), 'wallStone', { pos: [cx - 0.6, towerH + 0.95, 0] }));
+    g.add(piece(box(0.7, 0.7, towerD), 'wallStone', { pos: [cx + 0.6, towerH + 0.95, 0] }));
+  }
+
+  // Lintel beam bridging the opening.
+  g.add(piece(box(openW + towerW * 0.6, 1.4, towerD), 'wallStone', { pos: [0, lintelY + 0.7, 0] }));
+
+  // Intact doors (two wood leaves with iron bands) filling the opening.
+  const doors = new THREE.Group();
+  doors.name = 'gateDoors';
+  const leafW = openW / 2 - 0.05;
+  for (const side of [-1, 1] as const) {
+    doors.add(piece(box(leafW, lintelY, 0.4), 'wood', { pos: [side * (openW / 4), lintelY / 2, 0] }));
+  }
+  doors.add(piece(box(openW, 0.22, 0.5), 'ironDark', { pos: [0, lintelY * 0.3, 0] }));
+  doors.add(piece(box(openW, 0.22, 0.5), 'ironDark', { pos: [0, lintelY * 0.7, 0] }));
+
+  // Rubble strewn through the gap (varied faceted chunks).
+  const rubble = new THREE.Group();
+  rubble.name = 'breachRubble';
+  for (let i = 0; i < 8; i++) {
+    const chunk = new THREE.Mesh(ico(1, 0), materialFor('breachRubble'));
+    const s = 0.5 + Math.random() * 1.1;
+    chunk.scale.set(s * (0.8 + Math.random() * 0.6), s * (0.6 + Math.random() * 0.5), s * (0.8 + Math.random() * 0.6));
+    chunk.position.set((Math.random() - 0.5) * openW, s * 0.5, (Math.random() - 0.5) * 1.6);
+    chunk.rotation.set(Math.random() * Math.PI, Math.random() * Math.PI, Math.random() * Math.PI);
+    chunk.castShadow = true;
+    rubble.add(chunk);
+  }
+
+  doors.visible = !breached;
+  rubble.visible = breached;
+  g.add(doors, rubble);
+
+  g.userData = { doors, rubble } satisfies GateParts;
+  return g;
+}
+
+/**
+ * A low-poly town building (a walkable street-side block) facing -Z: stone body,
+ * proud base course, a pyramidal tile roof, a street-side door and two windows.
+ * Box top sits at y=`h`; the apex of the roof is higher.
+ */
+export function buildBuilding(w = 6, h = 7, d = 6): THREE.Group {
+  const g = new THREE.Group();
+  g.name = 'building';
+
+  g.add(piece(box(w, h, d), 'wallStone', { pos: [0, h / 2, 0] }));
+  g.add(piece(box(w + 0.2, h * 0.15, d + 0.2), 'wallStoneDark', { pos: [0, h * 0.075, 0] }));
+
+  // Pyramidal tile roof (4-sided cone, rotated to align ridges with the box).
+  const roof = new THREE.Mesh(cone(Math.max(w, d) * 0.78, h * 0.5, 4), materialFor('roofTile'));
+  roof.position.set(0, h + h * 0.25, 0);
+  roof.rotation.y = Math.PI / 4;
+  roof.castShadow = true;
+  g.add(roof);
+
+  // Street-facing door (-Z) + two windows.
+  g.add(piece(box(1.0, 1.8, 0.2), 'wood', { pos: [0, 0.9, -d / 2 - 0.01] }));
+  g.add(piece(box(0.8, 0.8, 0.15), 'wallStoneDark', { pos: [-w * 0.28, h * 0.6, -d / 2 - 0.01] }));
+  g.add(piece(box(0.8, 0.8, 0.15), 'wallStoneDark', { pos: [w * 0.28, h * 0.6, -d / 2 - 0.01] }));
+  return g;
+}
+
+/** Handles attached to a banner group's userData. */
+export interface BannerParts {
+  /** The hanging cloth panel (e.g. to sway it). */
+  cloth: THREE.Mesh;
+}
+
+/**
+ * A hanging siege banner: a short crossbar with a double-sided cloth panel
+ * draping down (top at y=0, hanging into -Y), an emblem block, default Empire
+ * red. The cloth faces ±Z. userData exposes {@link BannerParts}.
+ */
+export function buildBanner(colorKey: ColorKey = 'bannerRed'): THREE.Group {
+  const g = new THREE.Group();
+  g.name = 'banner';
+
+  // Crossbar the banner hangs from (cylinder laid along X).
+  g.add(piece(cyl(0.06, 0.06, 2.0, 6), 'wood', { pos: [0, 0, 0], rot: [0, 0, Math.PI / 2] }));
+
+  // Cloth panel + a darker pointed foot (inverted 4-sided cone).
+  const cloth = new THREE.Mesh(box(1.6, 3.0, 0.06), materialFor(colorKey, { doubleSide: true }));
+  cloth.position.set(0, -1.6, 0);
+  cloth.name = 'cloth';
+  cloth.castShadow = true;
+  g.add(cloth);
+
+  const foot = new THREE.Mesh(cone(1.13, 0.7, 4), materialFor(colorKey, { doubleSide: true }));
+  foot.position.set(0, -3.45, 0);
+  foot.rotation.set(Math.PI, Math.PI / 4, 0);
+  foot.castShadow = true;
+  g.add(foot);
+
+  // Emblem block in the centre.
+  g.add(piece(box(0.7, 0.7, 0.08), 'wallStoneDark', { pos: [0, -1.6, 0.05] }));
+
+  g.userData = { cloth } satisfies BannerParts;
+  return g;
+}
+
+/**
+ * The Helgrind backdrop: a dark stone massif crowned by FOUR black jagged
+ * spires of varied height (palette `shruikan`/`stoneDark`). A dramatic distant
+ * silhouette — the caller positions/scales the whole group far behind the city.
+ */
+export function buildHelgrind(): THREE.Group {
+  const g = new THREE.Group();
+  g.name = 'helgrind';
+
+  // Broad dark massif the spires rise from.
+  const base = new THREE.Mesh(ico(1, 0), materialFor('stoneDark'));
+  base.scale.set(34, 10, 22);
+  base.position.set(0, 2, 0);
+  base.castShadow = true;
+  g.add(base);
+
+  // Four jagged black spires (x, z, height, radius), deliberately uneven.
+  const spires: ReadonlyArray<readonly [number, number, number, number]> = [
+    [-14, 2, 46, 6],
+    [-4, -3, 62, 7],
+    [7, 1, 52, 6.5],
+    [16, -2, 40, 5],
+  ];
+  for (const [x, z, h, r] of spires) {
+    const spire = new THREE.Mesh(cone(r, h, 5), materialFor('shruikan'));
+    spire.position.set(x, h / 2, z);
+    spire.castShadow = true;
+    g.add(spire);
+    // A jagged shoulder mass to break up the cone silhouette near its base.
+    const shoulder = new THREE.Mesh(ico(1, 0), materialFor('shruikan'));
+    shoulder.scale.set(r * 0.9, h * 0.32, r * 0.9);
+    shoulder.position.set(x + r * 0.4, h * 0.2, z + r * 0.3);
+    shoulder.rotation.set(0.3, x, 0.2);
+    shoulder.castShadow = true;
+    g.add(shoulder);
+  }
+  return g;
+}
+
+/**
+ * A small elevated rooftop platform a rooftop-archer stands on. The deck is a
+ * thin slab centred at the group origin (top ≈ y=0.15); short posts drop below
+ * it and a low parapet rims the front (-Z) edge. The caller places the group at
+ * the rooftop height so the archer stands just above the origin.
+ */
+export function buildPerch(): THREE.Group {
+  const g = new THREE.Group();
+  g.name = 'perch';
+  const w = 2.6;
+  const d = 2.6;
+
+  // Deck slab.
+  g.add(piece(box(w, 0.3, d), 'roofTile', { pos: [0, 0, 0] }));
+
+  // Four short support posts under the deck.
+  const postH = 1.2;
+  const px = w / 2 - 0.25;
+  const pz = d / 2 - 0.25;
+  for (const sx of [-px, px]) {
+    for (const sz of [-pz, pz]) {
+      g.add(piece(box(0.2, postH, 0.2), 'wood', { pos: [sx, -postH / 2 - 0.15, sz] }));
+    }
+  }
+
+  // Low front parapet for the archer to crouch behind.
+  g.add(piece(box(w, 0.5, 0.2), 'wallStoneDark', { pos: [0, 0.4, -d / 2 + 0.1] }));
   return g;
 }

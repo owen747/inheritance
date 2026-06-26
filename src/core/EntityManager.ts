@@ -1,6 +1,8 @@
 import * as THREE from 'three';
 import { Entity, Combatant, Team, isCombatant } from './Entity';
 import type { EngineContext } from './EngineContext';
+import { isCachedGeometry } from '../art/meshes';
+import { isCachedMaterial } from '../art/materials';
 
 /**
  * Owns every updatable `Entity`. Adds/removes their meshes from the scene,
@@ -96,15 +98,23 @@ export class EntityManager {
     const mesh = entity.mesh;
     if (!mesh) return;
     this.scene.remove(mesh);
+    // Dispose ONLY resources unique to this entity. Riders/enemies share cached
+    // geometry (meshes.ts geoCache) and cached materials (materials.ts) across many
+    // living meshes, so disposing them on one death would break the survivors and
+    // churn the GPU. Shared cached resources are freed once, globally, by
+    // disposeGeometryCache()/disposeMaterials() on full teardown. Unique resources
+    // (ProjectilePool InstancedMesh, Vfx Points, Terrain planes) are NOT cached and
+    // are still disposed here.
     mesh.traverse((object) => {
       const asMesh = object as THREE.Mesh;
       if (asMesh.isMesh) {
-        asMesh.geometry?.dispose();
+        const geometry = asMesh.geometry;
+        if (geometry && !isCachedGeometry(geometry)) geometry.dispose();
         const material = asMesh.material;
         if (Array.isArray(material)) {
-          for (const m of material) m.dispose();
-        } else {
-          material?.dispose();
+          for (const m of material) if (!isCachedMaterial(m)) m.dispose();
+        } else if (material && !isCachedMaterial(material)) {
+          material.dispose();
         }
       }
     });

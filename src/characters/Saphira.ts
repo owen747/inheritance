@@ -72,6 +72,8 @@ export class Saphira extends Character implements MeleeAttacker {
     this.strike.damage = step.damage;
     this.strike.knockback = step.knockback;
     this.strike.team = this.team;
+    // Saphira cannot execute the laughing-soldier elite — never a finisher.
+    this.strike.finisher = false;
     return this.strike;
   }
 

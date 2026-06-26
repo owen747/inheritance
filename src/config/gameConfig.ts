@@ -18,6 +18,7 @@ export const KEYS = {
   throttleDown: 'ControlLeft',
   dodge: 'Space',
   attack: 'Mouse0',
+  heavy: 'Mouse2',
   spell1: 'Digit1',
   spell2: 'Digit2',
   spell3: 'Digit3',
@@ -87,6 +88,53 @@ export const ENERGY = {
   wardHp: 40,
   /** Fire-breath energy cost per second of sustained breathing. */
   breathCostPerSec: 14,
+} as const;
+
+/** Roran's full kit (toughness). */
+export const RORAN = {
+  /** Incoming-damage multiplier applied in Character.takeDamage. 1 = normal. */
+  damageTakenScale: 0.55,
+} as const;
+
+/**
+ * Roran's Rally ability — a hand-rolled cooldown (NO energy). Grants the ACTIVE
+ * Roran a self-ward (immediate combat value) AND heals the benched, non-regening
+ * roster (the real rotation payoff).
+ */
+export const RALLY = {
+  /** Ward HP added to the active Roran on cast. */
+  selfWard: 45,
+  /** Health restored to each benched ally on cast. */
+  heal: 35,
+  /** Cooldown between casts (seconds). */
+  cooldown: 12,
+} as const;
+
+/**
+ * Laughing-soldier stagger economy (pain-immune elite). Normal hits build the
+ * meter instead of dealing health damage; at `max` the elite is STAGGERED for
+ * `window` seconds (sized comfortably > a heavy windup+active) and a finisher
+ * landed during that window executes it. On expiry the meter PARTIALLY decays.
+ */
+export const STAGGER = {
+  /** Meter needed to enter the staggered (executable) state. */
+  max: 120,
+  /** Bonus meter added when a finisher lands while NOT staggered. */
+  finisherBonus: 40,
+  /** Seconds the elite stays staggered/executable. */
+  window: 3.0,
+  /** Fraction of the meter retained when the window expires (partial decay). */
+  decay: 0.5,
+} as const;
+
+/**
+ * Armored-brute armor. Only Roran's hammer deals full damage; every other source
+ * (Eragon's sword/magic, Saphira's fire, projectiles) is scaled down hard — the
+ * hard counter that FORCES a swap to Roran.
+ */
+export const ARMOR = {
+  /** Damage multiplier for non-Roran sources. */
+  nonRoranScale: 0.15,
 } as const;
 
 /**

@@ -55,6 +55,14 @@ export const PALETTE = {
   water: 0x2f6f8f,
   cityStone: 0x3c3a44, // distant burning-city silhouette
   smoke: 0x6b6b73, // smoke column particles
+
+  // Siege of Dras-Leona — grimy urban set
+  wallStone: 0x736f68, // grimy gray rampart/building stone
+  wallStoneDark: 0x4b4842, // soot-darkened base courses, shadowed stone
+  cobble: 0x5a5750, // worn cobblestone street
+  breachRubble: 0x3b3833, // sooty rubble in the breached gate
+  bannerRed: 0x9c1d1d, // Empire blood-red siege banner
+  roofTile: 0x6b3a2c, // terracotta roof tiles
 } as const;
 
 /** A type-safe key into {@link PALETTE}. */

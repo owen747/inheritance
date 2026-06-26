@@ -30,6 +30,16 @@ const UP = new THREE.Vector3(0, 1, 0);
 const _to = new THREE.Vector3();
 const _tan = new THREE.Vector3();
 
+/** Players (Characters) expose `invulnerable`; enemies/other combatants may not. */
+interface MaybeInvulnerable {
+  invulnerable: boolean;
+}
+
+/** True when a combatant structurally reports itself invulnerable (benched hero). */
+function isInvulnerable(c: Combatant): boolean {
+  return (c as Partial<MaybeInvulnerable>).invulnerable === true;
+}
+
 export interface EnemyOptions {
   maxHealth: number;
   /** 0 for non-casters (most enemies); >0 enables energy + per-step regen. */
@@ -110,22 +120,31 @@ export abstract class Enemy extends Entity implements Combatant, Hitstoppable {
   protected abstract think(dt: number, ctx: EngineContext): void;
 
   /**
-   * Resolve {@link target} to the nearest living player within aggro range.
-   * Overridable (e.g. the Ballista prefers the highest-flying dragon).
+   * Resolve {@link target} to the nearest VULNERABLE (i.e. ACTIVE, piloted) player
+   * within aggro range, so crowds attack the hero you're flying — not the benched
+   * invulnerable mannequins. Falls back to the nearest living player if none is
+   * vulnerable. Overridable (e.g. the Ballista prefers the highest-flying dragon).
    */
   protected acquireTarget(ctx: EngineContext): void {
     const players = ctx.query('player');
-    let nearest: Combatant | null = null;
-    let best = this.aggroRange * this.aggroRange;
+    const rangeSq = this.aggroRange * this.aggroRange;
+    let nearestVulnerable: Combatant | null = null;
+    let bestVulnerable = rangeSq;
+    let nearestLiving: Combatant | null = null;
+    let bestLiving = rangeSq;
     for (const p of players) {
       if (!p.alive) continue;
       const d = p.position.distanceToSquared(this.position);
-      if (d <= best) {
-        best = d;
-        nearest = p;
+      if (d <= bestLiving) {
+        bestLiving = d;
+        nearestLiving = p;
+      }
+      if (!isInvulnerable(p) && d <= bestVulnerable) {
+        bestVulnerable = d;
+        nearestVulnerable = p;
       }
     }
-    this.target = nearest;
+    this.target = nearestVulnerable ?? nearestLiving;
   }
 
   /** Mark dead, emit a death burst, and run the subclass hook. Idempotent. */

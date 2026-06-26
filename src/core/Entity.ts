@@ -67,7 +67,7 @@ export interface Combatant extends Entity {
   wardHp: number;
   /** Floating Ancient-Language text + (guarded) synth SFX. */
   shout(word: string): void;
-  takeDamage(amount: number, src?: Combatant): void;
+  takeDamage(amount: number, src?: Combatant, opts?: { finisher?: boolean }): void;
 }
 
 /** Runtime narrowing from `Entity` to `Combatant`. */

@@ -130,6 +130,26 @@ export class ProjectilePool extends Entity {
     this.instanced.instanceMatrix.needsUpdate = true;
   }
 
+  /**
+   * Neutralize every in-flight projectile OWNED by `team`, parking its slot
+   * off-screen. Used at a cutscene boundary (e.g. the Siege breach beat) to flush
+   * enemy arrows/lances already loosed so they can't deal damage during a beat
+   * where no death is registered. A slot's stored `targetTeam` is the OPPOSITE of
+   * its owner, so an enemy-owned shot targets 'player'.
+   */
+  clearTeam(team: Team): void {
+    let changed = false;
+    for (let i = 0; i < this.capacity; i++) {
+      if (this.active[i] === 0) continue;
+      const owner: Team = this.targetTeam[i] === 'player' ? 'enemy' : 'player';
+      if (owner === team) {
+        this.deactivate(i);
+        changed = true;
+      }
+    }
+    if (changed) this.instanced.instanceMatrix.needsUpdate = true;
+  }
+
   private deactivate(i: number): void {
     this.active[i] = 0;
     _matrix.compose(_hidden, _quat, _zero);
