@@ -2,3 +2,10 @@ node_modules/
 dist/
 *.local
 .DS_Store
+
+# mission-bridge + planning artifacts (local only)
+MISSION.*.md
+MISSION.*.log
+.mission-backups/
+.mission-archive/
+tmp/
