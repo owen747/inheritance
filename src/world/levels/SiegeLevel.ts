@@ -96,7 +96,6 @@ class WaveDirector {
   constructor(
     private readonly waves: ((ctx: EngineContext) => Enemy[])[],
     private readonly onSpawn: (e: Enemy) => void,
-    private readonly entities: EntityManager,
   ) {
     this.total = waves.length;
   }
@@ -389,7 +388,6 @@ export class SiegeLevel implements Level {
     this.waves = new WaveDirector(
       [(c) => this.spawnWave1(c), (c) => this.spawnWave2(c), (c) => this.spawnWave3(c)],
       (e) => this.spawn(e),
-      ctx.entities,
     );
     this.waves.start(ctx);
   }
