@@ -21,6 +21,7 @@ import * as THREE from 'three';
 import { Terrain } from './Terrain';
 import { buildHelgrind, buildPillar, buildThrone, isCachedGeometry, setCastShadow } from '../art/meshes';
 import { materialFor } from '../art/materials';
+import { floorMaterial } from '../art/textures';
 import { toColor } from '../art/palette';
 import { GROUND } from '../config/gameConfig';
 
@@ -159,8 +160,10 @@ export class Citadel {
     const midZ = (frontZ + backZ) / 2;
     const wallH = 18;
 
-    // Dark stone floor slab just above terrain ground (owned PlaneGeometry).
-    const floor = new THREE.Mesh(new THREE.PlaneGeometry(roomHalf * 2, roomLen), materialFor('throneDark', { roughness: 1 }));
+    // Dark stone floor slab just above terrain ground (owned PlaneGeometry) with a
+    // DEDICATED procedural dark-stone material (textured MeshStandardMaterial, not
+    // the shared cached flat one). receiveShadow stays on below.
+    const floor = new THREE.Mesh(new THREE.PlaneGeometry(roomHalf * 2, roomLen), floorMaterial());
     floor.rotation.x = -Math.PI / 2;
     floor.position.set(0, groundY + 0.02, midZ);
     floor.receiveShadow = true;

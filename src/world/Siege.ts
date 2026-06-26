@@ -16,6 +16,7 @@ import * as THREE from 'three';
 import { Terrain } from './Terrain';
 import { GateParts, buildWall, buildGate, buildBuilding, buildBanner, buildHelgrind, buildPerch, setCastShadow } from '../art/meshes';
 import { materialFor } from '../art/materials';
+import { streetMaterial, wallMaterial } from '../art/textures';
 import { toColor } from '../art/palette';
 
 /** Tunables for the Dras-Leona siege set. */
@@ -89,15 +90,19 @@ export class Siege {
         { x: -30, z: 20, height: 22, radius: 1.8 },
       ],
     });
-    // Dusk-tinted, sooty sky to sell the siege (art-only scene tweak).
+    // Dusk-tinted, sooty sky to sell the siege (art-only scene tweak). Fog is
+    // tinted to the gradient-sky horizon (siege preset skyHorizon 0x9c6238) so the
+    // burning-city horizon blends seamlessly into the dusk-orange sky dome.
     scene.background = toColor('skyDusk');
-    if (scene.fog) scene.fog.color.copy(toColor('smoke'));
+    if (scene.fog) scene.fog.color.copy(toColor(0x9c6238));
 
     // -- Cobbled street running down the centre toward the cathedral. ----------
+    // DEDICATED procedural cobble material (textured MeshStandardMaterial) — not
+    // the shared cached flat one.
     const streetLen = wallZ - cathedralZ + 16;
     const streetGeo = new THREE.PlaneGeometry(streetHalf * 2 + 4, streetLen, 1, 1);
     this.ownedGeometries.push(streetGeo);
-    const street = new THREE.Mesh(streetGeo, materialFor('cobble', { roughness: 1 }));
+    const street = new THREE.Mesh(streetGeo, streetMaterial());
     street.rotation.x = -Math.PI / 2;
     street.position.set(0, 0.02, (wallZ + cathedralZ) / 2 - 8);
     street.receiveShadow = true;
@@ -152,6 +157,18 @@ export class Siege {
 
     this.breachPosition = new THREE.Vector3(0, 0, wallZ - 6);
     this.cathedralPosition = new THREE.Vector3(0, 0, cathedralZ + 4);
+
+    // Texture the big stone surfaces: swap every mesh that uses the shared cached
+    // 'wallStone' flat material (walls, towers, gate, building bodies, merlons) to
+    // the DEDICATED procedural stone material. This re-points mesh.material only —
+    // the cached flat material is never mutated, so non-siege wallStone stays flat.
+    // Helgrind (stoneDark/shruikan) and wood/iron/banner parts are untouched.
+    const wallStoneMat = materialFor('wallStone');
+    const stoneMat = wallMaterial();
+    this.group.traverse((obj) => {
+      const mesh = obj as THREE.Mesh;
+      if (mesh.isMesh && mesh.material === wallStoneMat) mesh.material = stoneMat;
+    });
 
     scene.add(this.group);
   }

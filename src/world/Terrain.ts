@@ -5,6 +5,7 @@
 import * as THREE from 'three';
 import { PALETTE } from '../art/palette';
 import { materialFor } from '../art/materials';
+import { groundMaterial } from '../art/textures';
 
 /** Where to plant a rising smoke column (world XZ). */
 export interface SmokeColumnSpec {
@@ -69,9 +70,11 @@ export class Terrain {
     this.group = new THREE.Group();
     this.group.name = 'terrain';
 
-    // Ground — a large faceted plane lying in the XZ plane.
+    // Ground — a large plane lying in the XZ plane, with a DEDICATED procedural
+    // grass/dirt material (a textured MeshStandardMaterial, NOT the shared cached
+    // flat one — so only the big ground gets the texture). receiveShadow stays on.
     const groundGeo = new THREE.PlaneGeometry(size, size, 1, 1);
-    const ground = new THREE.Mesh(groundGeo, materialFor('ground', { roughness: 1 }));
+    const ground = new THREE.Mesh(groundGeo, groundMaterial());
     ground.rotation.x = -Math.PI / 2;
     ground.position.y = this.groundY;
     ground.receiveShadow = true;
@@ -168,8 +171,10 @@ export class Terrain {
 
   /**
    * Dispose this terrain's OWN geometries + Points materials and remove it from
-   * its parent. Shared flat materials (ground/water) live in the materials cache
-   * and are released via art/materials.disposeMaterials() on global teardown.
+   * its parent. The water flat material lives in the materials cache and the
+   * ground's dedicated procedural material in the textures cache; both are shared
+   * and released globally (disposeMaterials() / disposeTextures()) on teardown —
+   * never here (this only frees Points materials + the unique plane geometries).
    */
   dispose(): void {
     this.group.traverse((obj) => {

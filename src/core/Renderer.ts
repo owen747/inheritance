@@ -35,6 +35,16 @@ export class Renderer {
   private readonly rim: THREE.DirectionalLight;
 
   /**
+   * Gradient sky dome: a single large inward-facing sphere with a cheap
+   * horizon→zenith ShaderMaterial. Re-coloured per mood in {@link setLightingMood}
+   * (NO per-frame cost). Rendered first with depthWrite off so all geometry draws
+   * over it, and fog-exempt so the gradient stays pure (geometry blends into the
+   * horizon via fog, whose colour each mood matches to {@link skyMat}'s horizon).
+   */
+  private readonly skyMat: THREE.ShaderMaterial;
+  private readonly skyDome: THREE.Mesh;
+
+  /**
    * Post-processing pipeline: RenderPass -> Bloom -> SMAA -> OutputPass on
    * linear-HDR (HalfFloat) intermediate targets. We render through this instead
    * of `renderer.render(...)` so emissive/additive elements glow.
@@ -127,7 +137,49 @@ export class Renderer {
     this.scene.add(this.rim);
     this.scene.add(this.rim.target);
 
-    // Default to the bright-day mood so a level that never sets one looks right.
+    // Gradient sky dome. A huge BackSide sphere (radius < the camera far plane) so
+    // it always surrounds the camera; the gradient is computed from the world-space
+    // view DIRECTION (normalized vertex position), so it stays correct no matter
+    // where the camera roams. Uniform colours are LINEAR (THREE.Color stores the
+    // sRGB hex in linear working space) — the composer's OutputPass does the final
+    // sRGB encode, exactly like the standard materials. depthWrite:false +
+    // renderOrder -1 makes every other object draw on top; fog:false keeps the
+    // gradient itself un-fogged. The uniforms are filled by setLightingMood below.
+    this.skyMat = new THREE.ShaderMaterial({
+      side: THREE.BackSide,
+      depthWrite: false,
+      fog: false,
+      uniforms: {
+        horizon: { value: new THREE.Color() },
+        zenith: { value: new THREE.Color() },
+      },
+      vertexShader: `
+        varying vec3 vDir;
+        void main() {
+          // Object-space direction (the dome is centered at its own origin), so the
+          // gradient is stable no matter where the dome is positioned — we recenter
+          // it on the camera each frame, and this keeps the horizon band correct.
+          vDir = normalize(position.xyz);
+          gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+        }
+      `,
+      fragmentShader: `
+        uniform vec3 horizon;
+        uniform vec3 zenith;
+        varying vec3 vDir;
+        void main() {
+          float t = smoothstep(0.0, 0.55, vDir.y);
+          gl_FragColor = vec4(mix(horizon, zenith, t), 1.0);
+        }
+      `,
+    });
+    this.skyDome = new THREE.Mesh(new THREE.SphereGeometry(1500, 32, 16), this.skyMat);
+    this.skyDome.renderOrder = -1;
+    this.skyDome.frustumCulled = false;
+    this.scene.add(this.skyDome);
+
+    // Default to the bright-day mood so a level that never sets one looks right
+    // (also fills the sky-dome uniforms for the first frame).
     this.setLightingMood('aerial');
 
     // Base ground plane (the scaffold floor; real terrain arrives in the art chunk).
@@ -163,6 +215,12 @@ export class Renderer {
     // Per-mood bloom: the near-black Citadel leans on glow, so push bloom harder
     // there; the bright aerial day stays restrained. Cheap (one scalar).
     this.bloomPass.strength = POSTFX.bloom.strength * POSTFX.bloomByMood[mood];
+    // Recolour the gradient sky to match the mood. setHex defaults to sRGB input
+    // and stores LINEAR working-space rgb (THREE.ColorManagement on), so the
+    // uniform is already in the linear space the HDR composer expects — no extra
+    // convert. Mutates existing Color objects (no per-call allocation).
+    (this.skyMat.uniforms.horizon.value as THREE.Color).setHex(p.skyHorizon);
+    (this.skyMat.uniforms.zenith.value as THREE.Color).setHex(p.skyZenith);
   }
 
   /** Render with interpolation. `alpha` is `acc / STEP` of the fixed loop. */
@@ -173,6 +231,10 @@ export class Renderer {
       mesh.position.lerpVectors(entity.prevPosition, entity.position, alpha);
       mesh.quaternion.slerpQuaternions(entity.prevQuat, entity.quaternion, alpha);
     });
+    // Keep the sky dome centered on the camera so its far side never clips the far
+    // plane when the player flies far from the origin (the gradient is object-space,
+    // so moving the dome doesn't skew it).
+    this.skyDome.position.copy(this.camera.position);
     // Drive the full post-processing pipeline instead of a bare scene render so
     // the bloom/SMAA/output passes run. OutputPass does the final tone-map + sRGB.
     this.composer.render();
@@ -185,6 +247,8 @@ export class Renderer {
     // them explicitly too.
     for (const pass of this.passes) pass.dispose();
     this.composer.dispose();
+    this.skyDome.geometry.dispose();
+    this.skyMat.dispose();
     this.renderer.dispose();
   }
 

@@ -82,6 +82,14 @@ interface PieceOptions {
   rot?: [number, number, number];
   scale?: [number, number, number] | number;
   name?: string;
+  /**
+   * Opt a TINY detail part OUT of the sun-shadow pass (default true = casts).
+   * Set false for sub-parts that don't change the shadow silhouette (eyes, talons,
+   * wing struts, horn tips, grip bands) — this trims shadow-pass draw calls (Part-2
+   * tripled the mesh count) without altering the big readable shadow. Receiving is
+   * unaffected (these never receive anyway).
+   */
+  castShadow?: boolean;
 }
 
 /** Create a flat-shaded mesh from shared geometry + a palette color. */
@@ -94,7 +102,7 @@ function piece(geo: THREE.BufferGeometry, color: ColorKey, opts: PieceOptions = 
     else mesh.scale.set(opts.scale[0], opts.scale[1], opts.scale[2]);
   }
   if (opts.name) mesh.name = opts.name;
-  mesh.castShadow = true;
+  mesh.castShadow = opts.castShadow ?? true;
   mesh.receiveShadow = false;
   return mesh;
 }
@@ -153,8 +161,8 @@ export function buildDragon(colorKey: ColorKey = 'saphira'): THREE.Group {
   body.add(piece(box(1.0, 0.9, 1.4), colorKey, { pos: [0, -0.05, 1.0] })); // hindquarters (+Z)
   body.add(piece(box(1.5, 0.75, 0.95), colorKey, { pos: [0, 0.22, -0.85] })); // shoulder/chest bulk
   body.add(piece(box(0.9, 0.4, 2.6), 'belly', { pos: [0, -0.55, 0.3] })); // pale underbelly
-  body.add(piece(box(0.7, 0.12, 0.5), 'belly', { pos: [0, -0.74, -0.3] })); // belly scute line
-  body.add(piece(box(0.7, 0.12, 0.5), 'belly', { pos: [0, -0.74, 0.6] })); // belly scute line
+  body.add(piece(box(0.7, 0.12, 0.5), 'belly', { pos: [0, -0.74, -0.3], castShadow: false })); // belly scute line
+  body.add(piece(box(0.7, 0.12, 0.5), 'belly', { pos: [0, -0.74, 0.6], castShadow: false })); // belly scute line
   group.add(body);
 
   // Spinal ridge of small spikes running down the back.
@@ -166,15 +174,16 @@ export function buildDragon(colorKey: ColorKey = 'saphira'): THREE.Group {
     [1.2, 0.45],
   ];
   for (const [z, y] of backSpine) {
-    group.add(piece(cone(0.11, 0.34, 4), 'horn', { pos: [0, y, z], scale: [spikeScale, spikeScale, spikeScale] }));
+    // Tiny spinal spikes — excluded from the shadow pass (don't change the silhouette).
+    group.add(piece(cone(0.11, 0.34, 4), 'horn', { pos: [0, y, z], scale: [spikeScale, spikeScale, spikeScale], castShadow: false }));
   }
 
   // Neck — segmented, rising toward the head at -Z, with neck spikes continuing.
   const neck = new THREE.Group();
   neck.add(piece(cyl(0.42, 0.5, 0.9, 6), colorKey, { pos: [0, 0.45, -1.1], rot: [0.5, 0, 0] }));
   neck.add(piece(cyl(0.34, 0.42, 0.8, 6), colorKey, { pos: [0, 1.0, -1.65], rot: [0.75, 0, 0] }));
-  neck.add(piece(cone(0.09, 0.28, 4), 'horn', { pos: [0, 0.78, -1.25], rot: [-0.4, 0, 0], scale: [spikeScale, spikeScale, spikeScale] }));
-  neck.add(piece(cone(0.08, 0.24, 4), 'horn', { pos: [0, 1.22, -1.75], rot: [-0.6, 0, 0], scale: [spikeScale, spikeScale, spikeScale] }));
+  neck.add(piece(cone(0.09, 0.28, 4), 'horn', { pos: [0, 0.78, -1.25], rot: [-0.4, 0, 0], scale: [spikeScale, spikeScale, spikeScale], castShadow: false }));
+  neck.add(piece(cone(0.08, 0.24, 4), 'horn', { pos: [0, 1.22, -1.75], rot: [-0.6, 0, 0], scale: [spikeScale, spikeScale, spikeScale], castShadow: false }));
   group.add(neck);
 
   // Head — pivot group at the neck tip so it can turn; ALL detail hangs off this
@@ -192,19 +201,19 @@ export function buildDragon(colorKey: ColorKey = 'saphira'): THREE.Group {
   for (const ex of [-0.21, 0.21] as const) {
     const eye = new THREE.Mesh(ico(0.07, 0), glowMaterial(eyeHex, 1.7));
     eye.position.set(ex, 0.08, -0.2);
-    eye.castShadow = true;
+    eye.castShadow = false; // tiny glow — no shadow contribution
     head.add(eye);
   }
   // Primary horns (bigger/sharper on aggressive/massive dragons).
   head.add(piece(cone(0.1, 0.45, 4), 'horn', { pos: [-0.18, 0.4, 0.1], rot: [-0.4, 0, 0.2], scale: [spikeScale, spikeScale, spikeScale] })); // horn L
   head.add(piece(cone(0.1, 0.45, 4), 'horn', { pos: [0.18, 0.4, 0.1], rot: [-0.4, 0, -0.2], scale: [spikeScale, spikeScale, spikeScale] })); // horn R
-  // A second pair of smaller swept-back horns/frills.
-  head.add(piece(cone(0.07, 0.34, 4), 'horn', { pos: [-0.27, 0.18, 0.22], rot: [0.5, 0, 0.5], scale: [spikeScale, spikeScale, spikeScale] }));
-  head.add(piece(cone(0.07, 0.34, 4), 'horn', { pos: [0.27, 0.18, 0.22], rot: [0.5, 0, -0.5], scale: [spikeScale, spikeScale, spikeScale] }));
+  // A second pair of smaller swept-back horns/frills (too small for the shadow pass).
+  head.add(piece(cone(0.07, 0.34, 4), 'horn', { pos: [-0.27, 0.18, 0.22], rot: [0.5, 0, 0.5], scale: [spikeScale, spikeScale, spikeScale], castShadow: false }));
+  head.add(piece(cone(0.07, 0.34, 4), 'horn', { pos: [0.27, 0.18, 0.22], rot: [0.5, 0, -0.5], scale: [spikeScale, spikeScale, spikeScale], castShadow: false }));
   if (aggressive || massive) {
     // Extra cheek frills for a meaner profile.
-    head.add(piece(cone(0.06, 0.3, 4), 'horn', { pos: [-0.3, -0.04, 0.2], rot: [0.9, 0, 0.7] }));
-    head.add(piece(cone(0.06, 0.3, 4), 'horn', { pos: [0.3, -0.04, 0.2], rot: [0.9, 0, -0.7] }));
+    head.add(piece(cone(0.06, 0.3, 4), 'horn', { pos: [-0.3, -0.04, 0.2], rot: [0.9, 0, 0.7], castShadow: false }));
+    head.add(piece(cone(0.06, 0.3, 4), 'horn', { pos: [0.3, -0.04, 0.2], rot: [0.9, 0, -0.7], castShadow: false }));
   }
   group.add(head);
 
@@ -229,7 +238,7 @@ export function buildDragon(colorKey: ColorKey = 'saphira'): THREE.Group {
   tail.add(piece(cone(0.16, 0.6, 5), colorKey, { pos: [0, 0, 2.55], rot: [Math.PI / 2, 0, 0] })); // tail spike
   // Tail spikes (spine continues) + a vertical tail blade fin at the tip.
   for (const z of [0.4, 1.1, 1.8] as const) {
-    tail.add(piece(cone(0.09, 0.3, 4), 'horn', { pos: [0, 0.18, z], scale: [spikeScale, spikeScale, spikeScale] }));
+    tail.add(piece(cone(0.09, 0.3, 4), 'horn', { pos: [0, 0.18, z], scale: [spikeScale, spikeScale, spikeScale], castShadow: false }));
   }
   tail.add(piece(box(0.08, 0.7, 0.55), 'horn', { pos: [0, 0.14, 2.45] })); // tail blade fin
   group.add(tail);
@@ -258,7 +267,7 @@ function buildDragonLeg(thigh: ColorKey, lower: ColorKey, x: number, z: number):
   leg.add(piece(box(0.26, 0.45, 0.28), lower, { pos: [0, -0.62, 0.05] })); // lower leg
   leg.add(piece(box(0.32, 0.12, 0.46), lower, { pos: [0, -0.86, -0.1] })); // foot pad
   for (const tx of [-0.1, 0, 0.1] as const) {
-    leg.add(piece(cone(0.05, 0.18, 4), 'horn', { pos: [tx, -0.9, -0.34], rot: [-1.2, 0, 0] })); // talon
+    leg.add(piece(cone(0.05, 0.18, 4), 'horn', { pos: [tx, -0.9, -0.34], rot: [-1.2, 0, 0], castShadow: false })); // talon (tiny)
   }
   return leg;
 }
@@ -273,16 +282,18 @@ function buildWing(boneColor: ColorKey, membraneColor: ColorKey, side: 1 | -1): 
   const wing = new THREE.Group();
   // Main arm bone along ±X.
   wing.add(piece(box(2.2, 0.14, 0.16), boneColor, { pos: [side * 1.1, 0, 0] }));
-  // Wing-claw at the top/outer tip.
-  wing.add(piece(cone(0.07, 0.32, 4), 'horn', { pos: [side * 2.2, 0.06, 0.02], rot: [0.4, 0, side * -1.3] }));
+  // Wing-claw at the top/outer tip (tiny — out of the shadow pass).
+  wing.add(piece(cone(0.07, 0.32, 4), 'horn', { pos: [side * 2.2, 0.06, 0.02], rot: [0.4, 0, side * -1.3], castShadow: false }));
   // Finger-bone struts fanning toward the trailing edge (+Z): [xFrac, z, len, yRot].
+  // Thin struts — the membrane panels below already cast the wing's shadow, so the
+  // struts skip the shadow pass (no silhouette change, fewer shadow draw calls).
   const fingers: ReadonlyArray<readonly [number, number, number, number]> = [
     [0.7, 0.55, 1.5, 0.35],
     [1.1, 0.7, 1.3, 0.7],
     [1.55, 0.78, 1.0, 1.0],
   ];
   for (const [xf, z, len, yr] of fingers) {
-    wing.add(piece(box(len, 0.08, 0.1), boneColor, { pos: [side * xf, -0.02, z], rot: [0, side * yr, 0] }));
+    wing.add(piece(box(len, 0.08, 0.1), boneColor, { pos: [side * xf, -0.02, z], rot: [0, side * yr, 0], castShadow: false }));
   }
   // Scalloped membrane — a few double-sided panels rather than one flat slab.
   const panels: ReadonlyArray<readonly [number, number, number]> = [
@@ -358,21 +369,52 @@ function legPivot(garb: ColorKey, boots: ColorKey, x: number, name: string): THR
 }
 
 /**
- * One arm as a shoulder-pivoted group: upper arm hangs from the shoulder, a bent
- * forearm sub-group reaches down (and forward on the weapon arm so the gloved hand
- * meets the weaponMount). Static cosmetic detail — lives under `body`.
+ * The OFF-HAND arm (left): a shoulder-pivoted group with the upper arm + a gently
+ * bent forearm + gloved hand hanging beneath it. Static cosmetic detail under
+ * `body`. (The WEAPON arm is split — see {@link buildWeaponUpperArm} +
+ * {@link buildWeaponForearm} — so the forearm/hand can ride the weaponMount.)
  */
-function buildArm(sleeve: ColorKey, gloves: ColorKey, x: number, weapon: boolean): THREE.Group {
+function buildArm(sleeve: ColorKey, gloves: ColorKey, x: number): THREE.Group {
   const shoulder = new THREE.Group();
   shoulder.position.set(x, 1.46, 0);
   shoulder.add(piece(box(0.16, 0.42, 0.16), sleeve, { pos: [0, -0.21, 0] })); // upper arm
   const fore = new THREE.Group();
   fore.position.set(0, -0.42, 0);
-  fore.rotation.x = weapon ? -0.6 : -0.12; // weapon arm bends forward to grip the mount
+  fore.rotation.x = -0.12;
   fore.add(piece(box(0.14, 0.4, 0.14), sleeve, { pos: [0, -0.2, 0] })); // forearm
-  fore.add(piece(box(0.14, 0.15, 0.17), gloves, { pos: [0, -0.43, 0.01] })); // gloved hand
+  fore.add(piece(box(0.14, 0.15, 0.17), gloves, { pos: [0, -0.43, 0.01], castShadow: false })); // gloved hand (tiny)
   shoulder.add(fore);
   return shoulder;
+}
+
+/**
+ * The WEAPON-arm upper arm only: a shoulder-pivoted group with the upper arm,
+ * leaned forward so the elbow drops toward the weaponMount. It stays on `body`
+ * (static). The matching forearm + hand live UNDER the weaponMount so they swing
+ * with the weapon — see {@link buildWeaponForearm}.
+ */
+function buildWeaponUpperArm(sleeve: ColorKey, x: number): THREE.Group {
+  const shoulder = new THREE.Group();
+  shoulder.position.set(x, 1.46, 0);
+  shoulder.rotation.x = 0.35; // lean the elbow forward/down toward the grip
+  shoulder.add(piece(box(0.16, 0.42, 0.16), sleeve, { pos: [0, -0.21, 0] })); // upper arm
+  return shoulder;
+}
+
+/**
+ * The weapon-arm FOREARM + gripping HAND, built in the weaponMount's local space
+ * so that — parented under the mount — they swing AS ONE with the weapon and the
+ * hand always grips it. The hand sits at the grip (mount origin); the forearm
+ * rises from it back up toward the (static) elbow.
+ */
+function buildWeaponForearm(sleeve: ColorKey, gloves: ColorKey): THREE.Group {
+  const g = new THREE.Group();
+  g.name = 'weaponForearm';
+  // Forearm rises from the grip and leans back (+Z) toward the static elbow so the
+  // arm reads as connected; the hand stays at the grip (mount origin).
+  g.add(piece(box(0.14, 0.36, 0.14), sleeve, { pos: [0, 0.18, 0.04], rot: [0.45, 0, 0] }));
+  g.add(piece(box(0.14, 0.15, 0.17), gloves, { pos: [0, 0.0, 0.01], castShadow: false })); // gloved hand at grip
+  return g;
 }
 
 /**
@@ -436,11 +478,12 @@ export function buildRider(opts: RiderOptions = {}): THREE.Group {
   // plus either a shaped hair mass or a steel helm.
   const head = piece(ico(0.24, 0), skin, { pos: [0, 1.7, 0], name: 'head' });
   body.add(head);
+  // Tiny face details — excluded from the shadow pass (no silhouette effect).
   for (const ex of [-0.09, 0.09] as const) {
-    body.add(piece(box(0.06, 0.06, 0.04), 'riderEye', { pos: [ex, 1.73, -0.21] })); // eye
+    body.add(piece(box(0.06, 0.06, 0.04), 'riderEye', { pos: [ex, 1.73, -0.21], castShadow: false })); // eye
   }
-  body.add(piece(box(0.06, 0.09, 0.07), skin, { pos: [0, 1.66, -0.23] })); // nose
-  body.add(piece(box(0.26, 0.04, 0.06), hair, { pos: [0, 1.8, -0.18] })); // brow
+  body.add(piece(box(0.06, 0.09, 0.07), skin, { pos: [0, 1.66, -0.23], castShadow: false })); // nose
+  body.add(piece(box(0.26, 0.04, 0.06), hair, { pos: [0, 1.8, -0.18], castShadow: false })); // brow
   if (helm) {
     body.add(piece(box(0.36, 0.28, 0.38), 'armorSteel', { pos: [0, 1.8, 0] })); // helm dome
     body.add(piece(box(0.06, 0.26, 0.07), 'armorSteel', { pos: [0, 1.7, -0.21] })); // nasal guard
@@ -449,22 +492,26 @@ export function buildRider(opts: RiderOptions = {}): THREE.Group {
     body.add(piece(box(0.3, 0.26, 0.18), hair, { pos: [0, 1.74, 0.18] })); // longer hair at the back
   }
 
-  // Arms — upper arm + bent forearm + gloved hand. The right (weapon) arm reaches
-  // forward so its hand grips at the weaponMount.
-  body.add(buildArm(garb, gloves, 0.42, false)); // left arm
-  body.add(buildArm(garb, gloves, -0.42, true)); // right (weapon) arm
+  // Arms. The LEFT arm is a normal static arm. The RIGHT (weapon) arm is SPLIT:
+  // its upper arm stays on `body`, but its forearm + hand hang off the weaponMount
+  // (added below) so they swing together with the weapon and the hand keeps gripping.
+  body.add(buildArm(garb, gloves, 0.42)); // left (off-hand) arm
+  body.add(buildWeaponUpperArm(garb, -0.42)); // right upper arm (static on body)
 
   // Legs as hip pivots (walk swing) — thigh + shin + boot hang below the joint.
   const legL = legPivot(garb, boots, 0.16, 'legL');
   const legR = legPivot(garb, boots, -0.16, 'legR');
   body.add(legL, legR);
 
-  // Weapon mount at the right hand. A weapon built along +Y is held upright;
-  // the mount is tilted slightly forward (-Z) for a ready pose.
+  // Weapon mount at the right hand. A weapon built along +Y is held upright; the
+  // mount is tilted slightly forward (-Z) for a ready pose. The weapon-arm forearm
+  // + gripping hand are parented HERE (not on body) so swingWeapon's mount rotation
+  // carries the whole forearm+hand+weapon as one — the hand never leaves the grip.
   const weaponMount = new THREE.Group();
   weaponMount.name = 'weapon';
   weaponMount.position.set(-0.5, 0.95, 0.05);
   weaponMount.rotation.set(-0.2, 0, 0.05);
+  weaponMount.add(buildWeaponForearm(garb, gloves));
   body.add(weaponMount);
 
   const parts: RiderParts = { body, weaponMount, head, legL, legR };
@@ -489,15 +536,17 @@ export function dragonPartsOf(o: THREE.Object3D): DragonParts {
 export function buildSword(): THREE.Group {
   const g = new THREE.Group();
   g.name = 'sword';
+  // Blade + tip carry the readable shadow; the slim fuller/ricasso/guard/grip/
+  // bands/pommel detail skips the shadow pass (no silhouette change).
   g.add(piece(box(0.07, 1.0, 0.02), 'steel', { pos: [0, 0.6, 0] })); // blade
-  g.add(piece(box(0.02, 0.8, 0.03), 'ironDark', { pos: [0, 0.62, 0] })); // fuller (central groove)
-  g.add(piece(box(0.09, 0.12, 0.04), 'ironDark', { pos: [0, 0.16, 0] })); // ricasso (unsharpened base)
+  g.add(piece(box(0.02, 0.8, 0.03), 'ironDark', { pos: [0, 0.62, 0], castShadow: false })); // fuller (central groove)
+  g.add(piece(box(0.09, 0.12, 0.04), 'ironDark', { pos: [0, 0.16, 0], castShadow: false })); // ricasso (unsharpened base)
   g.add(piece(cone(0.06, 0.16, 4), 'steel', { pos: [0, 1.18, 0] })); // tip
-  g.add(piece(box(0.32, 0.08, 0.08), 'ironDark', { pos: [0, 0.08, 0] })); // crossguard
-  g.add(piece(cyl(0.05, 0.05, 0.22, 6), 'leather', { pos: [0, -0.08, 0] })); // leather-wrapped grip
-  g.add(piece(box(0.11, 0.03, 0.11), 'ironDark', { pos: [0, -0.02, 0] })); // grip wrap band
-  g.add(piece(box(0.11, 0.03, 0.11), 'ironDark', { pos: [0, -0.14, 0] })); // grip wrap band
-  g.add(piece(ico(0.07, 0), 'ironDark', { pos: [0, -0.21, 0] })); // pommel
+  g.add(piece(box(0.32, 0.08, 0.08), 'ironDark', { pos: [0, 0.08, 0], castShadow: false })); // crossguard
+  g.add(piece(cyl(0.05, 0.05, 0.22, 6), 'leather', { pos: [0, -0.08, 0], castShadow: false })); // leather-wrapped grip
+  g.add(piece(box(0.11, 0.03, 0.11), 'ironDark', { pos: [0, -0.02, 0], castShadow: false })); // grip wrap band
+  g.add(piece(box(0.11, 0.03, 0.11), 'ironDark', { pos: [0, -0.14, 0], castShadow: false })); // grip wrap band
+  g.add(piece(ico(0.07, 0), 'ironDark', { pos: [0, -0.21, 0], castShadow: false })); // pommel
   return g;
 }
 
@@ -505,12 +554,13 @@ export function buildSword(): THREE.Group {
 export function buildHammer(): THREE.Group {
   const g = new THREE.Group();
   g.name = 'hammer';
+  // Haft + head carry the shadow; the wrap/reinforcing bands skip the shadow pass.
   g.add(piece(cyl(0.06, 0.07, 1.2, 6), 'wood', { pos: [0, 0.4, 0] })); // haft
-  g.add(piece(box(0.13, 0.04, 0.13), 'leather', { pos: [0, 0.1, 0] })); // haft wrap band
-  g.add(piece(box(0.13, 0.04, 0.13), 'leather', { pos: [0, 0.3, 0] })); // haft wrap band
+  g.add(piece(box(0.13, 0.04, 0.13), 'leather', { pos: [0, 0.1, 0], castShadow: false })); // haft wrap band
+  g.add(piece(box(0.13, 0.04, 0.13), 'leather', { pos: [0, 0.3, 0], castShadow: false })); // haft wrap band
   g.add(piece(box(0.36, 0.34, 0.34), 'ironDark', { pos: [0, 1.05, 0] })); // head
-  g.add(piece(box(0.4, 0.08, 0.38), 'steel', { pos: [0, 1.2, 0] })); // top reinforcing band
-  g.add(piece(box(0.4, 0.08, 0.38), 'steel', { pos: [0, 0.9, 0] })); // bottom reinforcing band
+  g.add(piece(box(0.4, 0.08, 0.38), 'steel', { pos: [0, 1.2, 0], castShadow: false })); // top reinforcing band
+  g.add(piece(box(0.4, 0.08, 0.38), 'steel', { pos: [0, 0.9, 0], castShadow: false })); // bottom reinforcing band
   g.add(piece(box(0.16, 0.3, 0.3), 'ironDark', { pos: [0.28, 1.05, 0] })); // claw side
   return g;
 }

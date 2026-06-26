@@ -258,6 +258,14 @@ export interface LightingPreset {
   rimIntensity: number;
   /** ACES tone-mapping exposure for this mood. */
   exposure: number;
+  /**
+   * Gradient-sky HORIZON color (hex). Kept ≈ this mood's fog color so distant
+   * geometry fades seamlessly into the sky at the horizon. Deliberately dim
+   * (linear luminance < the bloom threshold) so the sky itself never blooms.
+   */
+  skyHorizon: number;
+  /** Gradient-sky ZENITH color (hex) — the top of the dome (also kept un-bloomy). */
+  skyZenith: number;
 }
 
 /**
@@ -292,6 +300,9 @@ export const LIGHTING = {
       rimColor: 0x90b4ff,
       rimIntensity: 0.3,
       exposure: 1.15,
+      // Pale fog-blue horizon (= PALETTE.fog) lifting to a clear daytime blue.
+      skyHorizon: 0xb9cdd9,
+      skyZenith: 0x4a86c8,
     },
     // Warm low dusk — long shadows, orange key, sooty cool fill (matches skyDusk bg).
     siege: {
@@ -304,6 +315,10 @@ export const LIGHTING = {
       rimColor: 0x6a4a7a,
       rimIntensity: 0.4,
       exposure: 1.05,
+      // Sooty dusk-orange horizon (Siege also tints its fog to match) rising to a
+      // deep indigo zenith — the burning-siege gradient.
+      skyHorizon: 0x9c6238,
+      skyZenith: 0x1f1a3a,
     },
     // Cold, moody throne — a dim cold-blue key + lifted cold ambient so the scene
     // stays clearly VISIBLE/playable (you must see Galbatorix, the anchors, the
@@ -318,6 +333,10 @@ export const LIGHTING = {
       rimColor: 0x6a86d8,
       rimIntensity: 0.85,
       exposure: 1.15,
+      // Near-black horizon (= the Citadel fog 0x161320) bleeding up into a cold,
+      // oppressive deep blue.
+      skyHorizon: 0x161320,
+      skyZenith: 0x0c1428,
     },
   } satisfies Record<LightingMood, LightingPreset>,
 } as const;
