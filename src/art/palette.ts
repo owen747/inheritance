@@ -19,6 +19,7 @@ export const PALETTE = {
   // Dragon secondary tones (wing membranes, belly, horns)
   saphiraDark: 0x1b3f8c,
   thornDark: 0x781219,
+  shruikanDark: 0x2b313f, // desaturated dark blue-grey for Shruikan's wings/legs (reads vs a dark sky)
   membrane: 0x2a2d3a, // dark leathery wing membrane
   horn: 0xe8e2cf, // bone/horn off-white
   belly: 0xbfc7d6, // pale underbelly
@@ -63,6 +64,11 @@ export const PALETTE = {
   breachRubble: 0x3b3833, // sooty rubble in the breached gate
   bannerRed: 0x9c1d1d, // Empire blood-red siege banner
   roofTile: 0x6b3a2c, // terracotta roof tiles
+
+  // Urû'baen — Galbatorix's black citadel + throne room
+  citadelBlack: 0x111016, // the near-black mass of the citadel / Galbatorix's robe
+  throneDark: 0x23222a, // dark stone for the throne, pillars, and interior walls
+  gold: 0xd4af37, // Galbatorix's crown / robe trim
 } as const;
 
 /** A type-safe key into {@link PALETTE}. */

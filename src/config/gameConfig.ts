@@ -138,6 +138,59 @@ export const ARMOR = {
 } as const;
 
 /**
+ * Galbatorix finale boss (Level 3, Phase 2). He is MECHANIC-GATED, never a DPS
+ * race: `Galbatorix.takeDamage` is a pure no-op (he NEVER loses health). While
+ * his ward tiers stand he attacks the active hero with telegraphed magic shots
+ * plus an occasional radial AoE; the level ends him only via the typed unmaking.
+ */
+export const GALBATORIX = {
+  /** Cosmetic only — he is never killed by HP, so this is just the (full) bar. */
+  maxHealth: 1000,
+  /** Wide reach so he keeps pressure on whichever hero is active near the throne. */
+  aggroRange: 120,
+  /** Large-ish boss collider. */
+  colliderRadius: 1.6,
+  /** Orientation slerp rate (lambda) as he tracks the active hero. */
+  turnRate: 4.0,
+  /** Seconds between magic casts (cadence). */
+  attackCadence: 2.2,
+  /** Telegraph wind-up before a cast resolves (gives the player a tell). */
+  telegraph: 0.5,
+  /** Single magic-bolt projectile. */
+  projDamage: 16,
+  projSpeed: 34,
+  projRadius: 0.7,
+  projTtl: 3.5,
+  /** Every Nth cast is a radial AoE burst instead of a single bolt. */
+  aoeEvery: 4,
+  /** Bolts in the radial ring. */
+  aoeCount: 12,
+  aoeSpeed: 22,
+  aoeDamage: 12,
+  /** Minimum seconds between deflect VFX/SFX bursts (throttle for spammy hits). */
+  deflectThrottle: 0.18,
+} as const;
+
+/**
+ * Eldunarí ward-anchors (Level 3, Phase 2). Destructible Combatants (team
+ * 'enemy') that float around the throne; destroying one fires `onDestroyed`
+ * (decrements Galbatorix's `wardTier`). NO hero-gating — a generous collider so
+ * Saphira fire / Eragon spells reliably connect, even at altitude.
+ */
+export const ANCHOR = {
+  /** Modest HP — meant to be torn down, not grinded. */
+  hp: 60,
+  /** Generous so projectiles/fire connect reliably, esp. on raised anchors. */
+  colliderRadius: 1.6,
+  /** Bob (float) angular speed (radians/sec). */
+  bobSpeed: 1.6,
+  /** Bob vertical amplitude (world units). */
+  bobAmplitude: 0.6,
+  /** Slow gem spin (radians/sec). */
+  spinSpeed: 0.8,
+} as const;
+
+/**
  * Max-energy granted per collected Eldunarí. The total bonus is DERIVED from the
  * collected set (`collected.length * ELDUNARI_BONUS`) — never an imperative ++ —
  * so a reload can't double-count and the bigger energy bar is reproducible.

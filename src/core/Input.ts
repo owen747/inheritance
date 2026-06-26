@@ -29,6 +29,14 @@ export class Input {
 
   private mode: ControlMode = 'GROUND';
 
+  // When frozen, all GAMEPLAY reads (`pressed`/`justPressed`/`axis`) return
+  // neutral so the hero can't move or attack — used by the Level-3 typed-unmaking
+  // window so typing "waise neiat" (w/a/s/e are WASD) doesn't walk the hero. Raw
+  // keydown recording (the `down` set) is untouched, so a separate window keydown
+  // capture (e.g. the level's typed-cast listener) still works. Defaults false;
+  // additive — only L3 ever calls `setFrozen`, so L1/L2 are unaffected.
+  private frozen = false;
+
   constructor() {
     window.addEventListener('keydown', this.onKeyDown);
     window.addEventListener('keyup', this.onKeyUp);
@@ -48,13 +56,20 @@ export class Input {
     return this.mode;
   }
 
-  /** Held this step. */
+  /** Freeze/unfreeze gameplay reads (move/attack/axes). Raw keydown unaffected. */
+  setFrozen(v: boolean): void {
+    this.frozen = v;
+  }
+
+  /** Held this step. Always false while frozen. */
   pressed(action: InputAction): boolean {
+    if (this.frozen) return false;
     return this.down.has(KEYS[action]);
   }
 
-  /** True only on the frame the action went from up -> down. */
+  /** True only on the frame the action went from up -> down. False while frozen. */
   justPressed(action: InputAction): boolean {
+    if (this.frozen) return false;
     const code = KEYS[action];
     return this.down.has(code) && !this.prevDown.has(code);
   }
@@ -70,6 +85,7 @@ export class Input {
    * is non-zero only on the first substep of each frame; see {@link beginStep}).
    */
   axis(axis: Axis): number {
+    if (this.frozen) return 0; // frozen: no aim/move/throttle from any axis
     const sens = INPUT.mouseSensitivity;
     const pitchSign = INPUT.invertPitch ? -1 : 1;
     if (this.mode === 'FLIGHT') {

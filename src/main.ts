@@ -23,11 +23,12 @@ const game = new Game(canvas, uiRoot);
 registerLevel('aerial-duel', () => new AerialDuelLevel(game.input, game));
 registerLevel('dev-sandbox', () => new DevSandboxLevel(game.input, game));
 registerLevel('siege', () => new SiegeLevel(game.input, game));
-registerLevel('urubaen', () => new UrubaenLevel());
+registerLevel('urubaen', () => new UrubaenLevel(game.input, game));
 
 // Boot into the real Level 1: TITLE screen -> Start -> Phase 1 (Sky).
-// Dev affordance: load the page with the URL hash `#siege` to jump straight into
-// Level 2 for playtesting (Phase 1 Sky), skipping Level 1. Default stays L1.
-const bootLevel = location.hash === '#siege' ? 'siege' : 'aerial-duel';
+// Dev affordance: load the page with a URL hash to jump straight into a later
+// level for playtesting (`#urubaen` -> Level 3, `#siege` -> Level 2). Default L1.
+const bootLevel =
+  location.hash === '#urubaen' ? 'urubaen' : location.hash === '#siege' ? 'siege' : 'aerial-duel';
 game.bootInto(bootLevel);
 game.start();

@@ -109,7 +109,14 @@ export interface DragonParts {
  * @param colorKey primary body color (also picks a matching dark/membrane tone)
  */
 export function buildDragon(colorKey: ColorKey = 'saphira'): THREE.Group {
-  const dark: ColorKey = colorKey === 'thorn' ? 'thornDark' : colorKey === 'saphira' ? 'saphiraDark' : colorKey;
+  const dark: ColorKey =
+    colorKey === 'thorn'
+      ? 'thornDark'
+      : colorKey === 'saphira'
+        ? 'saphiraDark'
+        : colorKey === 'shruikan'
+          ? 'shruikanDark'
+          : colorKey;
   const group = new THREE.Group();
   group.name = 'dragon';
 
@@ -605,5 +612,146 @@ export function buildPerch(): THREE.Group {
 
   // Low front parapet for the archer to crouch behind.
   g.add(piece(box(w, 0.5, 0.2), 'wallStoneDark', { pos: [0, 0.4, -d / 2 + 0.1] }));
+  return g;
+}
+
+// ----------------------------------------------------------------------------
+// Urû'baen — Galbatorix's black citadel + throne room. Dark stone interior
+// pieces (pillar, throne), the dark king himself, and the larger floating
+// Eldunarí ward-anchor. All faceted, shared geometry, -Z forward.
+// ----------------------------------------------------------------------------
+
+/** Animatable handles attached to a Galbatorix group's userData. */
+export interface GalbatorixParts {
+  /** The head (e.g. to tilt/face the active hero). */
+  head: THREE.Mesh;
+}
+
+/**
+ * Build the dark king Galbatorix, facing -Z, ~2.4 units tall, feet at y=0:
+ * a tall black robe with gold trim, a pale grim head under a golden crown, and
+ * a black blade held at his side. Deliberately taller/broader than a rider so
+ * he reads as the menacing final boss. userData exposes {@link GalbatorixParts}.
+ */
+export function buildGalbatorix(): THREE.Group {
+  const group = new THREE.Group();
+  group.name = 'galbatorix';
+
+  // Robe skirt — a wide tapered cone sweeping to the floor.
+  group.add(piece(cone(0.85, 1.7, 6), 'citadelBlack', { pos: [0, 0.85, 0] }));
+  // Gold hem ring around the base of the robe.
+  group.add(piece(cyl(0.88, 0.92, 0.18, 6), 'gold', { pos: [0, 0.12, 0] }));
+
+  // Torso + shoulder mantle (broad for a looming silhouette).
+  group.add(piece(box(0.85, 0.9, 0.45), 'citadelBlack', { pos: [0, 1.85, 0] }));
+  group.add(piece(box(1.15, 0.28, 0.6), 'throneDark', { pos: [0, 2.18, 0] })); // mantle
+  group.add(piece(box(0.9, 0.12, 0.5), 'gold', { pos: [0, 1.5, 0] })); // gold sash/belt trim
+
+  // Head — a pale, grim face above the mantle.
+  const head = piece(ico(0.26, 0), 'elfTone', { pos: [0, 2.6, 0], name: 'head' });
+  group.add(head);
+
+  // Crown — a golden band ringed with sharp points.
+  group.add(piece(cyl(0.28, 0.3, 0.18, 8), 'gold', { pos: [0, 2.86, 0] }));
+  const crownPoints = 8;
+  for (let i = 0; i < crownPoints; i++) {
+    const a = (i / crownPoints) * Math.PI * 2;
+    group.add(piece(cone(0.05, 0.22, 4), 'gold', { pos: [Math.cos(a) * 0.27, 3.02, Math.sin(a) * 0.27] }));
+  }
+
+  // Arms hanging at the sides (dark sleeves).
+  group.add(piece(box(0.22, 0.85, 0.22), 'citadelBlack', { pos: [0.55, 1.85, 0] }));
+  group.add(piece(box(0.22, 0.85, 0.22), 'citadelBlack', { pos: [-0.55, 1.85, 0] }));
+
+  // A long black sword held point-down at his right side.
+  const sword = new THREE.Group();
+  sword.position.set(-0.62, 1.5, 0.15);
+  sword.rotation.set(0.15, 0, 0.08);
+  sword.add(piece(box(0.09, 1.5, 0.03), 'citadelBlack', { pos: [0, -0.6, 0] })); // blade (point down)
+  sword.add(piece(cone(0.07, 0.22, 4), 'citadelBlack', { pos: [0, -1.45, 0], rot: [Math.PI, 0, 0] })); // tip
+  sword.add(piece(box(0.34, 0.09, 0.09), 'ironDark', { pos: [0, 0.1, 0] })); // crossguard
+  sword.add(piece(ico(0.07, 0), 'gold', { pos: [0, 0.28, 0] })); // pommel
+  group.add(sword);
+
+  group.userData = { head } satisfies GalbatorixParts;
+  return group;
+}
+
+/**
+ * A tall dark-stone throne facing -Z, base at y=0, ~5 units tall: a stepped
+ * dais, a seat, flanking armrests, and a soaring jagged backrest. The caller
+ * positions the whole group (e.g. at the throne-room centre).
+ */
+export function buildThrone(): THREE.Group {
+  const g = new THREE.Group();
+  g.name = 'throne';
+
+  // Stepped stone dais.
+  g.add(piece(box(4.4, 0.5, 4.0), 'throneDark', { pos: [0, 0.25, 0] }));
+  g.add(piece(box(3.4, 0.5, 3.2), 'citadelBlack', { pos: [0, 0.75, 0] }));
+
+  // Seat + back slab.
+  g.add(piece(box(2.4, 0.5, 2.0), 'throneDark', { pos: [0, 1.25, 0] })); // seat
+  g.add(piece(box(2.4, 3.6, 0.6), 'citadelBlack', { pos: [0, 3.0, 0.9] })); // tall backrest
+
+  // Armrests.
+  for (const side of [-1, 1] as const) {
+    g.add(piece(box(0.5, 1.3, 2.0), 'throneDark', { pos: [side * 1.45, 1.9, 0] }));
+  }
+
+  // Jagged crown spikes atop the backrest.
+  const spikes: ReadonlyArray<readonly [number, number]> = [
+    [-0.8, 1.0],
+    [0, 1.4],
+    [0.8, 1.0],
+  ];
+  for (const [sx, sh] of spikes) {
+    g.add(piece(cone(0.22, sh, 5), 'citadelBlack', { pos: [sx, 4.8 + sh / 2 - 0.6, 0.9] }));
+  }
+  return g;
+}
+
+/**
+ * A dark stone column for the throne-room interior, base at y=0. A fluted shaft
+ * between a proud base block and a capital. `height` is the full pillar height
+ * (default 12). The caller positions the group on the floor.
+ */
+export function buildPillar(height = 12): THREE.Group {
+  const g = new THREE.Group();
+  g.name = 'pillar';
+
+  const baseH = 0.8;
+  const capH = 0.8;
+  const shaftH = Math.max(1, height - baseH - capH);
+
+  g.add(piece(box(1.6, baseH, 1.6), 'throneDark', { pos: [0, baseH / 2, 0] })); // base block
+  g.add(piece(cyl(0.55, 0.65, shaftH, 8), 'citadelBlack', { pos: [0, baseH + shaftH / 2, 0] })); // shaft
+  g.add(piece(box(1.6, capH, 1.6), 'throneDark', { pos: [0, baseH + shaftH + capH / 2, 0] })); // capital
+  return g;
+}
+
+/**
+ * A larger floating Eldunarí ward-anchor: an emissive gem (brighter + bigger
+ * than {@link buildEldunari}) wrapped in a faint translucent halo, sized to bob
+ * in the air around the throne. userData.gem is the gem mesh (spin/pulse it).
+ */
+export function buildEldunariAnchor(colorKey: ColorKey = 'eldunariGlow'): THREE.Group {
+  const g = new THREE.Group();
+  g.name = 'eldunariAnchor';
+  const glow = colorOf(colorKey);
+
+  const gem = new THREE.Mesh(ico(0.9, 0), glowMaterial(glow, 2.4));
+  gem.name = 'gem';
+  gem.castShadow = true;
+  g.add(gem);
+
+  // Faint outer halo for an airborne soul-light silhouette.
+  const halo = new THREE.Mesh(
+    ico(1.4, 0),
+    materialFor(colorKey, { transparent: true, opacity: 0.16, emissive: glow, emissiveIntensity: 1.0 }),
+  );
+  g.add(halo);
+
+  g.userData = { gem } satisfies EldunariParts;
   return g;
 }
