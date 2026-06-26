@@ -115,6 +115,9 @@ export class UrubaenLevel implements Level {
     this.entities = ctx.entities;
     this.ctx = ctx;
 
+    // Cold, dim, near-black throne mood — oppressive, lit mostly by gem/fire glow.
+    this.host.setLightingMood('citadel');
+
     // Transient systems (VFX + projectile pool), as in the siege.
     const vfx = new VfxSystem();
     ctx.entities.add(vfx);

@@ -232,6 +232,95 @@ export const ANCHOR = {
 export const ELDUNARI_BONUS = 30;
 
 /**
+ * Per-level lighting mood. Levels call `host.setLightingMood(mood)` in `load()`;
+ * the Renderer relights the shared rig (key sun + hemi fill + rim) to match. A
+ * level that never sets a mood keeps the Renderer's default ('aerial').
+ */
+export type LightingMood = 'aerial' | 'siege' | 'citadel';
+
+/** A full relight: key sun, hemisphere fill, low rim/back light, tone exposure. */
+export interface LightingPreset {
+  /** Directional key-sun color (hex). */
+  sunColor: number;
+  /** Key-sun intensity (physically-based; ACES rolls the highlights off). */
+  sunIntensity: number;
+  /** Key-sun world position; also the shadow camera's eye (direction = pos -> origin). */
+  sunPosition: readonly [number, number, number];
+  /** Hemisphere fill sky color (hex). */
+  hemiSky: number;
+  /** Hemisphere fill ground color (hex). */
+  hemiGround: number;
+  /** Hemisphere fill intensity. */
+  hemiIntensity: number;
+  /** Low rim/back light color (character pop; never casts shadow). */
+  rimColor: number;
+  /** Rim/back light intensity. */
+  rimIntensity: number;
+  /** ACES tone-mapping exposure for this mood. */
+  exposure: number;
+}
+
+/**
+ * Lighting tunables: the sun's SHADOW frustum (a tight ortho box fitted to the
+ * gameplay area at the origin, NOT the 2000-unit far plane — crisp + cheap) plus
+ * the three per-level mood presets. `rimPosition` is a shared low back-light dir.
+ */
+export const LIGHTING = {
+  /** Half-extent (world units) of the ortho shadow box centred on the origin. */
+  shadowBox: 70,
+  /** Shadow camera near plane. */
+  shadowNear: 1,
+  /** Shadow camera far plane — covers every preset's sun distance + the box. */
+  shadowFar: 300,
+  /** Square shadow map resolution (one cascade; tight frustum keeps it crisp). */
+  shadowMapSize: 2048,
+  /** Depth bias to kill shadow acne. */
+  shadowBias: -0.0005,
+  /** Normal-offset bias to kill peter-panning without widening acne. */
+  shadowNormalBias: 0.02,
+  /** Fixed world position of the low rim/back light (low, behind the -Z facing heroes). */
+  rimPosition: [-30, 18, -45] as const,
+  presets: {
+    // Bright open day — sun high, cool sky fill. The sane default.
+    aerial: {
+      sunColor: 0xfff2d6,
+      sunIntensity: 3.0,
+      sunPosition: [50, 90, 40],
+      hemiSky: 0xbfe3ff,
+      hemiGround: 0x4a5a38,
+      hemiIntensity: 0.6,
+      rimColor: 0x90b4ff,
+      rimIntensity: 0.3,
+      exposure: 1.15,
+    },
+    // Warm low dusk — long shadows, orange key, sooty cool fill (matches skyDusk bg).
+    siege: {
+      sunColor: 0xff8b3d,
+      sunIntensity: 2.8,
+      sunPosition: [-85, 26, 40],
+      hemiSky: 0xc98a5a,
+      hemiGround: 0x2a221c,
+      hemiIntensity: 0.45,
+      rimColor: 0x6a4a7a,
+      rimIntensity: 0.4,
+      exposure: 1.05,
+    },
+    // Cold, dim, near-black throne — weak low sun, faint cold fill, rely on glow.
+    citadel: {
+      sunColor: 0x7088c0,
+      sunIntensity: 0.65,
+      sunPosition: [-40, 30, -20],
+      hemiSky: 0x1a2030,
+      hemiGround: 0x07080c,
+      hemiIntensity: 0.3,
+      rimColor: 0x4a64b0,
+      rimIntensity: 0.7,
+      exposure: 0.9,
+    },
+  } satisfies Record<LightingMood, LightingPreset>,
+} as const;
+
+/**
  * Camera follow tuning (third-person damped follow). The rig follows the active
  * entity's INTERPOLATED transform per render frame (same `alpha` the renderer uses),
  * so it stays judder-free with the world at any refresh rate.

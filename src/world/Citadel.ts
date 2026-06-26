@@ -19,7 +19,7 @@
 // so an enthroned Galbatorix looks toward heroes entering from +Z.
 import * as THREE from 'three';
 import { Terrain } from './Terrain';
-import { buildHelgrind, buildPillar, buildThrone, isCachedGeometry } from '../art/meshes';
+import { buildHelgrind, buildPillar, buildThrone, isCachedGeometry, setCastShadow } from '../art/meshes';
 import { materialFor } from '../art/materials';
 import { toColor } from '../art/palette';
 import { GROUND } from '../config/gameConfig';
@@ -83,6 +83,10 @@ export class Citadel {
     }
 
     this.skyGroup = this.buildSky();
+    // The Phase-1 aerial backdrop (citadel mass, overhang, Helgrind spires) sits
+    // far at -Z, well outside the gameplay shadow box — never let it cast. The
+    // throne-room set (walls/pillars/throne) is in the box and KEEPS casting.
+    setCastShadow(this.skyGroup, false);
     this.throneGroup = this.buildThroneRoom(throneZ, roomHalf, groundY);
     this.throneGroup.visible = false; // Phase-2 set starts hidden
 

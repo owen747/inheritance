@@ -189,6 +189,9 @@ export class SiegeLevel implements Level {
   load(ctx: EngineContext): void {
     this.entities = ctx.entities;
 
+    // Warm low-dusk mood (long orange shadows) matching the sooty siege sky.
+    this.host.setLightingMood('siege');
+
     // Transient systems (VFX + projectile pool), as in the aerial duel.
     const vfx = new VfxSystem();
     ctx.entities.add(vfx);

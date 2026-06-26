@@ -54,6 +54,19 @@ function ico(r: number, detail = 0): THREE.BufferGeometry {
   return cached(`ico:${r}:${detail}`, () => new THREE.IcosahedronGeometry(r, detail));
 }
 
+/**
+ * Set `castShadow` on every mesh under `root` (in place). Used to EXCLUDE far
+ * backdrops (Helgrind spires, the citadel mass, the distant city silhouette) from
+ * the tight sun-shadow frustum: they sit far outside the gameplay box, so casting
+ * from them would waste the shadow map + perf for no visible benefit. Receiving is
+ * left untouched.
+ */
+export function setCastShadow(root: THREE.Object3D, on: boolean): void {
+  root.traverse((obj) => {
+    if ((obj as THREE.Mesh).isMesh) obj.castShadow = on;
+  });
+}
+
 /** Dispose all cached geometry. Call on full art teardown alongside disposeMaterials(). */
 export function disposeGeometryCache(): void {
   for (const g of geoCache.values()) g.dispose();

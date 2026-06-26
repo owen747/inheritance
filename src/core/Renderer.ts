@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import type { EntityManager } from './EntityManager';
+import { LIGHTING, type LightingMood } from '../config/gameConfig';
 
 const SKY_COLOR = 0x9fc6e8;
 const GROUND_COLOR = 0x4f7a43;
@@ -9,15 +10,39 @@ const GROUND_COLOR = 0x4f7a43;
  * resize handler. `render(alpha)` interpolates every entity's visual mesh from
  * its previous to its current sim transform by the leftover-accumulator alpha,
  * so motion stays smooth on non-60Hz displays despite a fixed simulation.
+ *
+ * Lighting rig: an ACES-tone-mapped pipeline with a single shadow-casting key
+ * sun (tight ortho frustum fitted to the gameplay box at the origin), a
+ * hemisphere fill, and a low rim/back light for character pop. `setLightingMood`
+ * relights the whole rig per level (see {@link LightingMood}); the default mood
+ * is 'aerial' so a level that never sets one still looks right.
  */
 export class Renderer {
   readonly renderer: THREE.WebGLRenderer;
   readonly scene: THREE.Scene;
   readonly camera: THREE.PerspectiveCamera;
 
+  /** Shadow-casting key sun (re-coloured/-positioned per mood). */
+  private readonly sun: THREE.DirectionalLight;
+  /** Sky/ground hemisphere fill (re-coloured per mood). */
+  private readonly hemi: THREE.HemisphereLight;
+  /** Low rim/back light for silhouette pop (never casts; re-coloured per mood). */
+  private readonly rim: THREE.DirectionalLight;
+
   constructor(private readonly canvas: HTMLCanvasElement) {
     this.renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+
+    // Filmic tone mapping + sRGB output: emissive glows roll off instead of
+    // clipping to flat white, and colours land in the right space. Exposure is
+    // retuned per mood in setLightingMood().
+    this.renderer.outputColorSpace = THREE.SRGBColorSpace;
+    this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
+    this.renderer.toneMappingExposure = 1.0;
+
+    // Single soft shadow map, driven only by the key sun (cheap + crisp).
+    this.renderer.shadowMap.enabled = true;
+    this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 
     this.scene = new THREE.Scene();
     this.scene.background = new THREE.Color(SKY_COLOR);
@@ -26,22 +51,69 @@ export class Renderer {
     this.camera = new THREE.PerspectiveCamera(60, 1, 0.1, 2000);
     this.camera.position.set(0, 6, 14);
 
-    const hemi = new THREE.HemisphereLight(0xbfe3ff, 0x39482c, 1.1);
-    this.scene.add(hemi);
+    this.hemi = new THREE.HemisphereLight(0xbfe3ff, 0x39482c, 1.0);
+    this.scene.add(this.hemi);
 
-    const sun = new THREE.DirectionalLight(0xfff2d6, 1.4);
-    sun.position.set(40, 80, 30);
-    this.scene.add(sun);
+    // Key sun. The shadow camera is a TIGHT ortho box fitted to the ±shadowBox
+    // gameplay area at the origin (NOT the 2000-unit far plane), so shadow texels
+    // stay dense and the single 2048 map is plenty. Bias/normalBias kill acne +
+    // peter-panning. The frustum is constant; only the sun's direction changes
+    // per mood (it always aims at the origin via the default target).
+    this.sun = new THREE.DirectionalLight(0xfff2d6, 3.0);
+    this.sun.castShadow = true;
+    this.sun.shadow.mapSize.set(LIGHTING.shadowMapSize, LIGHTING.shadowMapSize);
+    const cam = this.sun.shadow.camera;
+    cam.left = -LIGHTING.shadowBox;
+    cam.right = LIGHTING.shadowBox;
+    cam.top = LIGHTING.shadowBox;
+    cam.bottom = -LIGHTING.shadowBox;
+    cam.near = LIGHTING.shadowNear;
+    cam.far = LIGHTING.shadowFar;
+    cam.updateProjectionMatrix();
+    this.sun.shadow.bias = LIGHTING.shadowBias;
+    this.sun.shadow.normalBias = LIGHTING.shadowNormalBias;
+    this.scene.add(this.sun);
+    this.scene.add(this.sun.target); // keep the target (origin) in the graph
+
+    // Low rim/back light: no shadow, just edge-pops characters out of the dark.
+    this.rim = new THREE.DirectionalLight(0xffffff, 0.3);
+    this.rim.position.set(...LIGHTING.rimPosition);
+    this.scene.add(this.rim);
+    this.scene.add(this.rim.target);
+
+    // Default to the bright-day mood so a level that never sets one looks right.
+    this.setLightingMood('aerial');
 
     // Base ground plane (the scaffold floor; real terrain arrives in the art chunk).
     const groundGeo = new THREE.PlaneGeometry(1000, 1000);
     const groundMat = new THREE.MeshStandardMaterial({ color: GROUND_COLOR, roughness: 1 });
     const ground = new THREE.Mesh(groundGeo, groundMat);
     ground.rotation.x = -Math.PI / 2;
+    ground.receiveShadow = true;
     this.scene.add(ground);
 
     this.resize();
     window.addEventListener('resize', this.resize);
+  }
+
+  /**
+   * Relight the shared rig for a level's mood (key sun colour/intensity/angle,
+   * hemisphere fill, rim light, and tone exposure). Mutates the existing lights
+   * in place — NO per-frame or per-call allocation beyond colour `.set()`s. The
+   * shadow frustum is unchanged (the sun still aims at the origin); only its
+   * direction moves. Levels call this from `load()`.
+   */
+  setLightingMood(mood: LightingMood): void {
+    const p = LIGHTING.presets[mood];
+    this.sun.color.setHex(p.sunColor);
+    this.sun.intensity = p.sunIntensity;
+    this.sun.position.set(p.sunPosition[0], p.sunPosition[1], p.sunPosition[2]);
+    this.hemi.color.setHex(p.hemiSky);
+    this.hemi.groundColor.setHex(p.hemiGround);
+    this.hemi.intensity = p.hemiIntensity;
+    this.rim.color.setHex(p.rimColor);
+    this.rim.intensity = p.rimIntensity;
+    this.renderer.toneMappingExposure = p.exposure;
   }
 
   /** Render with interpolation. `alpha` is `acc / STEP` of the fixed loop. */

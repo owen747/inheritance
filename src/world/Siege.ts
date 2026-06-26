@@ -14,7 +14,7 @@
 // from the breach (+Z) inward toward the cathedral (-Z); Saphira flies above.
 import * as THREE from 'three';
 import { Terrain } from './Terrain';
-import { GateParts, buildWall, buildGate, buildBuilding, buildBanner, buildHelgrind, buildPerch } from '../art/meshes';
+import { GateParts, buildWall, buildGate, buildBuilding, buildBanner, buildHelgrind, buildPerch, setCastShadow } from '../art/meshes';
 import { materialFor } from '../art/materials';
 import { toColor } from '../art/palette';
 
@@ -147,6 +147,7 @@ export class Siege {
     const helgrind = buildHelgrind();
     helgrind.position.set(-26, 0, cathedralZ - 110);
     helgrind.scale.setScalar(1.6);
+    setCastShadow(helgrind, false); // far backdrop — keep it out of the shadow frustum
     this.group.add(helgrind);
 
     this.breachPosition = new THREE.Vector3(0, 0, wallZ - 6);

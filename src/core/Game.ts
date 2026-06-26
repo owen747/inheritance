@@ -13,6 +13,7 @@ import { Transition } from '../ui/Transition';
 import { CombatSystem } from '../combat/CombatSystem';
 import { createLevel, type Level } from '../world/Level';
 import type { ControlMode } from './Input';
+import type { LightingMood } from '../config/gameConfig';
 
 export type Phase = 'TITLE' | 'PLAYING' | 'PAUSED' | 'WON' | 'LOST';
 
@@ -254,6 +255,11 @@ export class Game {
   /** PlayerHost: lets the active character honour the debug godmode toggle. */
   isGodmode(): boolean {
     return this.godmode;
+  }
+
+  /** Level hook: relight the shared rig for the level's mood (Siege dusk, Citadel dark). */
+  setLightingMood(mood: LightingMood): void {
+    this.renderer.setLightingMood(mood);
   }
 
   /** Level hook: jump to the win screen (objective met). Idempotent. */

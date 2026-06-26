@@ -32,12 +32,14 @@ import { Murtagh } from '../../enemies/Murtagh';
 import { Ballista } from '../../enemies/Ballista';
 import { Terrain } from '../Terrain';
 import { placeCitySilhouette, createEldunari, type EldunariPickup } from '../props';
-import { ELDUNARI_BONUS, GROUND } from '../../config/gameConfig';
+import { setCastShadow } from '../../art/meshes';
+import { ELDUNARI_BONUS, GROUND, type LightingMood } from '../../config/gameConfig';
 import type { HudInfo, HudInfoProvider, HudSpellSlot, HudRosterEntry } from '../../ui/HUD';
 
 /** Everything the level needs from the Game to drive swap, HUD, and win/lose. */
 export type AerialDuelHost = PlayerHost & {
   setHudInfoProvider(provider: HudInfoProvider | null): void;
+  setLightingMood(mood: LightingMood): void;
   win(): void;
   lose(): void;
   setEndText(phase: 'WON' | 'LOST', title: string, subtitle: string): void;
@@ -104,6 +106,9 @@ export class AerialDuelLevel implements Level {
   load(ctx: EngineContext): void {
     this.entities = ctx.entities;
 
+    // Bright open-day mood (also resets the rig if we arrived from a darker level).
+    this.host.setLightingMood('aerial');
+
     // Transient systems (VFX + projectile pool), as in the dev sandbox.
     const vfx = new VfxSystem();
     ctx.entities.add(vfx);
@@ -133,6 +138,8 @@ export class AerialDuelLevel implements Level {
       span: 220,
       count: 30,
     });
+    // Far backdrop — exclude from the tight sun-shadow frustum.
+    setCastShadow(this.city, false);
 
     // --- Phase 1 roster: Saphira only (so Thorn/ballistae can't target ground). -
     const saphira = new Saphira(this.input, ctx.audio);
