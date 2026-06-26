@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Inheritance — Aerial Duel</title>
+    <style>
+      html,
+      body {
+        margin: 0;
+        height: 100%;
+        overflow: hidden;
+        background: #000;
+        font-family: system-ui, sans-serif;
+        color: #fff;
+      }
+      #game {
+        display: block;
+        width: 100vw;
+        height: 100vh;
+      }
+      /* DOM overlay layer above the WebGL canvas. The container ignores pointer
+         events so canvas clicks (pointer-lock) pass through; individual overlays
+         opt back in. */
+      #ui-root {
+        position: fixed;
+        inset: 0;
+        pointer-events: none;
+      }
+      #ui-root > * {
+        pointer-events: auto;
+      }
+    </style>
+    <script type="module" crossorigin src="./assets/index-BTufYPY0.js"></script>
+    <link rel="stylesheet" crossorigin href="./assets/index-CzVPzjeP.css">
+  </head>
+  <body>
+    <canvas id="game"></canvas>
+    <div id="ui-root"></div>
+  </body>
+</html>
