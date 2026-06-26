@@ -305,19 +305,51 @@ export const LIGHTING = {
       rimIntensity: 0.4,
       exposure: 1.05,
     },
-    // Cold, dim, near-black throne — weak low sun, faint cold fill, rely on glow.
+    // Cold, moody throne — a dim cold-blue key + lifted cold ambient so the scene
+    // stays clearly VISIBLE/playable (you must see Galbatorix, the anchors, the
+    // dragon) while reading oppressive; the 1.7x bloom pops the gems/fire on top.
     citadel: {
-      sunColor: 0x7088c0,
-      sunIntensity: 0.65,
-      sunPosition: [-40, 30, -20],
-      hemiSky: 0x1a2030,
-      hemiGround: 0x07080c,
-      hemiIntensity: 0.3,
-      rimColor: 0x4a64b0,
-      rimIntensity: 0.7,
-      exposure: 0.9,
+      sunColor: 0x8aa0d4,
+      sunIntensity: 1.5,
+      sunPosition: [-40, 38, -20],
+      hemiSky: 0x44567c,
+      hemiGround: 0x161a26,
+      hemiIntensity: 0.85,
+      rimColor: 0x6a86d8,
+      rimIntensity: 0.85,
+      exposure: 1.15,
     },
   } satisfies Record<LightingMood, LightingPreset>,
+} as const;
+
+/**
+ * Post-processing (EffectComposer) tunables. The pipeline is
+ * RenderPass -> UnrealBloomPass -> SMAAPass -> OutputPass on linear-HDR
+ * (HalfFloat) targets, so OutputPass owns the ACES tone-map + sRGB encode at the
+ * very end (the renderer's own auto tone-map-on-render is bypassed by the
+ * composer). Bloom runs on the pre-tone-mapped HDR scene, so the threshold is in
+ * LINEAR space: a high threshold means only genuinely bright emissive/additive
+ * pixels (dragon eyes, Eldunarí gems, fire, spell VFX) bloom — the bright daytime
+ * sky/diffuse stays crisp and un-blurred. UnrealBloomPass already downsamples to
+ * half resolution internally, so bloom is cheap.
+ */
+export const POSTFX = {
+  bloom: {
+    /** Base bloom intensity (scaled per-mood by {@link POSTFX.bloomByMood}). */
+    strength: 0.6,
+    /** Blur spread of the bloom falloff. */
+    radius: 0.4,
+    /**
+     * Linear-HDR luminance above which a pixel blooms. High (~0.85) so only the
+     * intended glows bloom, not the whole bright scene.
+     */
+    threshold: 0.85,
+  },
+  /**
+   * Per-mood bloom-strength multiplier. The near-black Citadel leans on glow, so
+   * its gems/fire pop harder; the bright aerial day stays restrained.
+   */
+  bloomByMood: { aerial: 1.0, siege: 1.15, citadel: 1.7 } satisfies Record<LightingMood, number>,
 } as const;
 
 /**

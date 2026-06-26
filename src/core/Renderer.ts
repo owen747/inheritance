@@ -1,6 +1,11 @@
 import * as THREE from 'three';
+import { EffectComposer } from 'three/examples/jsm/postprocessing/EffectComposer.js';
+import { RenderPass } from 'three/examples/jsm/postprocessing/RenderPass.js';
+import { UnrealBloomPass } from 'three/examples/jsm/postprocessing/UnrealBloomPass.js';
+import { SMAAPass } from 'three/examples/jsm/postprocessing/SMAAPass.js';
+import { OutputPass } from 'three/examples/jsm/postprocessing/OutputPass.js';
 import type { EntityManager } from './EntityManager';
-import { LIGHTING, type LightingMood } from '../config/gameConfig';
+import { LIGHTING, POSTFX, type LightingMood } from '../config/gameConfig';
 
 const SKY_COLOR = 0x9fc6e8;
 const GROUND_COLOR = 0x4f7a43;
@@ -29,6 +34,17 @@ export class Renderer {
   /** Low rim/back light for silhouette pop (never casts; re-coloured per mood). */
   private readonly rim: THREE.DirectionalLight;
 
+  /**
+   * Post-processing pipeline: RenderPass -> Bloom -> SMAA -> OutputPass on
+   * linear-HDR (HalfFloat) intermediate targets. We render through this instead
+   * of `renderer.render(...)` so emissive/additive elements glow.
+   */
+  private readonly composer: EffectComposer;
+  /** Bloom pass kept as a field so `setLightingMood` can retune its strength. */
+  private readonly bloomPass: UnrealBloomPass;
+  /** Every pass we own — disposed individually (composer.dispose only frees its RTs). */
+  private readonly passes: ReadonlyArray<RenderPass | UnrealBloomPass | SMAAPass | OutputPass>;
+
   constructor(private readonly canvas: HTMLCanvasElement) {
     this.renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
@@ -50,6 +66,36 @@ export class Renderer {
 
     this.camera = new THREE.PerspectiveCamera(60, 1, 0.1, 2000);
     this.camera.position.set(0, 6, 14);
+
+    // Post-processing pipeline. The EffectComposer's default intermediate render
+    // targets are linear HDR (THREE.HalfFloatType), so bloom operates on values
+    // >1 and nothing is tone-mapped/clamped until the very end. RenderPass writes
+    // the raw lit scene to that HDR target (the WebGLRenderer applies tone mapping
+    // + sRGB ONLY when drawing to the canvas, NOT to a render target, so there is
+    // NO double tone-mapping here); OutputPass performs the single ACES tone-map +
+    // sRGB encode last, reading `renderer.toneMapping`/`outputColorSpace`/exposure
+    // (left intact above). Built before `setLightingMood` so it can retune bloom.
+    const { width, height } = this.currentSize();
+    const pixelRatio = this.renderer.getPixelRatio();
+    this.composer = new EffectComposer(this.renderer);
+    const renderPass = new RenderPass(this.scene, this.camera);
+    // UnrealBloomPass downsamples to half resolution internally (cheap). The
+    // resolution vec2 is corrected by `composer.setSize` on the first resize().
+    this.bloomPass = new UnrealBloomPass(
+      new THREE.Vector2(width, height),
+      POSTFX.bloom.strength,
+      POSTFX.bloom.radius,
+      POSTFX.bloom.threshold,
+    );
+    // EffectComposer renders into an offscreen target, so canvas MSAA (antialias:
+    // true) no longer reaches the final image — SMAA restores edge AA.
+    const smaaPass = new SMAAPass(width * pixelRatio, height * pixelRatio);
+    const outputPass = new OutputPass();
+    this.composer.addPass(renderPass);
+    this.composer.addPass(this.bloomPass);
+    this.composer.addPass(smaaPass);
+    this.composer.addPass(outputPass);
+    this.passes = [renderPass, this.bloomPass, smaaPass, outputPass];
 
     this.hemi = new THREE.HemisphereLight(0xbfe3ff, 0x39482c, 1.0);
     this.scene.add(this.hemi);
@@ -114,6 +160,9 @@ export class Renderer {
     this.rim.color.setHex(p.rimColor);
     this.rim.intensity = p.rimIntensity;
     this.renderer.toneMappingExposure = p.exposure;
+    // Per-mood bloom: the near-black Citadel leans on glow, so push bloom harder
+    // there; the bright aerial day stays restrained. Cheap (one scalar).
+    this.bloomPass.strength = POSTFX.bloom.strength * POSTFX.bloomByMood[mood];
   }
 
   /** Render with interpolation. `alpha` is `acc / STEP` of the fixed loop. */
@@ -124,19 +173,38 @@ export class Renderer {
       mesh.position.lerpVectors(entity.prevPosition, entity.position, alpha);
       mesh.quaternion.slerpQuaternions(entity.prevQuat, entity.quaternion, alpha);
     });
-    this.renderer.render(this.scene, this.camera);
+    // Drive the full post-processing pipeline instead of a bare scene render so
+    // the bloom/SMAA/output passes run. OutputPass does the final tone-map + sRGB.
+    this.composer.render();
   }
 
   dispose(): void {
     window.removeEventListener('resize', this.resize);
+    // composer.dispose() only frees its own intermediate render targets; each pass
+    // owns extra GPU resources (bloom mip chain, SMAA lookup textures), so dispose
+    // them explicitly too.
+    for (const pass of this.passes) pass.dispose();
+    this.composer.dispose();
     this.renderer.dispose();
   }
 
+  /** Current backing-store size in CSS pixels (canvas client, with a layout-0 fallback). */
+  private currentSize(): { width: number; height: number } {
+    return {
+      width: this.canvas.clientWidth || window.innerWidth,
+      height: this.canvas.clientHeight || window.innerHeight,
+    };
+  }
+
   private readonly resize = (): void => {
-    const width = this.canvas.clientWidth || window.innerWidth;
-    const height = this.canvas.clientHeight || window.innerHeight;
+    const { width, height } = this.currentSize();
     this.renderer.setSize(width, height, false);
     this.camera.aspect = width / height;
     this.camera.updateProjectionMatrix();
+    // Keep the composer + every pass (bloom + SMAA targets) in lock-step with the
+    // canvas and DPR. setSize multiplies by the pixel ratio internally, so pass CSS
+    // pixels here; bloom/SMAA targets are re-allocated at the correct resolution.
+    this.composer.setPixelRatio(this.renderer.getPixelRatio());
+    this.composer.setSize(width, height);
   };
 }
