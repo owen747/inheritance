@@ -53,6 +53,12 @@ export const FLIGHT = {
   cruiseSpeed: 18,
   /** Soft auto-level toward horizon when not rolling (radians/sec). */
   passiveHoverBob: 0.6,
+  /** Auto-bank: max visual lean (radians) at full yaw input — a lean, not a barrel-roll. */
+  bankAngle: 0.55,
+  /** Rate (lambda) the bank leans INTO a yaw turn. */
+  bankRate: 6,
+  /** Rate (lambda) the bank auto-levels back to 0 when not yawing. */
+  bankLevelRate: 3,
 } as const;
 
 /** Ground locomotion (Eragon / Roran). */
@@ -64,6 +70,10 @@ export const GROUND = {
   turnRate: 1.0,
   /** Feet-on-ground reference height (flat arena). */
   groundY: 0,
+  /** Acceleration responsiveness (lambda) ramping toward the desired input velocity. */
+  accel: 11,
+  /** Deceleration/friction responsiveness (lambda) when input releases (gives stops weight). */
+  friction: 9,
 } as const;
 
 /** Combat tuning shared by the combo machine + CombatSystem. */
@@ -78,6 +88,12 @@ export const COMBAT = {
   rollSpeed: 12,
   /** Hitstop freeze applied to both combatants on a clean hit (seconds). */
   hitstop: 0.07,
+  /** Base camera-shake trauma added on ANY landed melee hit (0..1). */
+  shakeHit: 0.16,
+  /** Extra trauma added per point of strike damage (bigger hits shake more). */
+  shakePerDamage: 0.006,
+  /** Trauma bonus when the landed hit is a finisher (heavy execute). */
+  shakeFinisher: 0.22,
 } as const;
 
 /** Energy / life-force economy. */
@@ -197,9 +213,13 @@ export const ANCHOR = {
  */
 export const ELDUNARI_BONUS = 30;
 
-/** Camera follow tuning (third-person damped follow). */
+/**
+ * Camera follow tuning (third-person damped follow). The rig follows the active
+ * entity's INTERPOLATED transform per render frame (same `alpha` the renderer uses),
+ * so it stays judder-free with the world at any refresh rate.
+ */
 export const CAMERA = {
-  /** Damping rate (higher = snappier). Used as `1 - exp(-lambda * dt)`. */
+  /** Damping rate (higher = snappier). Used as `1 - exp(-lambda * frameDt)`. */
   followLambda: 7,
   lookLambda: 9,
   /** Local-space offset from the target in GROUND (over-shoulder) mode. */
@@ -208,4 +228,12 @@ export const CAMERA = {
   flightOffset: [0, 4, 14] as const,
   /** Where the camera aims, relative to the target position. */
   lookOffset: [0, 1.2, 0] as const,
+  /** Look-ahead: lead distance (world units) the aim point leans toward the target's facing. */
+  lookAhead: 2.5,
+  /** Easing rate (lambda) for the look-ahead lead (kept gentle). */
+  lookAheadLambda: 3,
+  /** Screen-shake: trauma decay rate per second (short + subtle). */
+  shakeDecay: 1.7,
+  /** Max positional shake offset (world units) at full trauma; offset scales by trauma^2. */
+  shakeScale: 0.45,
 } as const;

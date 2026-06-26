@@ -13,7 +13,7 @@ import type { MeleeAttacker, MeleeStrike } from '../combat/CombatSystem';
 import { buildDragon, dragonPartsOf, type DragonParts } from '../art/meshes';
 import { flapWings } from '../art/anim';
 import { getVfx } from '../art/vfx';
-import { clamp } from '../core/mathx';
+import { clamp, damp } from '../core/mathx';
 import { FLIGHT, ENERGY, COMBAT } from '../config/gameConfig';
 
 // Module-scope scratch — reused every step, never reallocated.
@@ -39,6 +39,8 @@ export class Saphira extends Character implements MeleeAttacker {
   private hoverPhase = 0;
   private hoverBaseY = 30;
   private breathCd = 0;
+  /** Current auto-bank lean (radians) applied to the orientation; eases in/out of turns. */
+  private bank = 0;
 
   private readonly combo: ComboStateMachine;
   private readonly strike: MeleeStrike;
@@ -85,10 +87,22 @@ export class Saphira extends Character implements MeleeAttacker {
 
   protected override controlActive(dt: number, ctx: EngineContext): void {
     // Pitch is a raw mouse-radian delta; yaw/roll are keyboard rates * dt.
-    const pitch = this.input.axis('pitch');
-    const yaw = this.input.axis('yaw') * FLIGHT.yawRate * dt;
-    const roll = this.input.axis('roll') * FLIGHT.rollRate * dt;
-    _e.set(pitch * FLIGHT.pitchRate, yaw, roll, 'XYZ');
+    const pitchIn = this.input.axis('pitch');
+    const yawIn = this.input.axis('yaw');
+    const rollIn = this.input.axis('roll');
+
+    // Auto-bank: lean INTO the turn proportional to yaw input, auto-levelling back to
+    // 0 when not yawing. The bank is tracked as an angle and applied as the per-step
+    // DELTA, so it accumulates + unwinds cleanly. Blended with manual Q/E roll.
+    const turning = yawIn !== 0;
+    const targetBank = -yawIn * FLIGHT.bankAngle;
+    const newBank = damp(this.bank, targetBank, turning ? FLIGHT.bankRate : FLIGHT.bankLevelRate, dt);
+    const bankDelta = newBank - this.bank;
+    this.bank = newBank;
+
+    const yaw = yawIn * FLIGHT.yawRate * dt;
+    const roll = rollIn * FLIGHT.rollRate * dt + bankDelta;
+    _e.set(pitchIn * FLIGHT.pitchRate, yaw, roll, 'XYZ');
     _dq.setFromEuler(_e);
     this.quaternion.multiply(_dq).normalize();
 

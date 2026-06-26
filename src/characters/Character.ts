@@ -175,6 +175,7 @@ export abstract class Character extends Entity {
 const _fwd = new THREE.Vector3();
 const _right = new THREE.Vector3();
 const _move = new THREE.Vector3();
+const _desiredVel = new THREE.Vector3();
 
 /**
  * Ground biped: WASD locomotion relative to a mouse-driven heading, a dodge-roll
@@ -187,6 +188,8 @@ export abstract class GroundCharacter extends Character implements MeleeAttacker
 
   protected readonly combo: ComboStateMachine;
   private yaw = 0;
+  /** Persistent ground velocity (units/sec) — accelerates/decays for movement weight. */
+  private readonly vel = new THREE.Vector3();
   private readonly strike: MeleeStrike;
   private readonly riderAnim = new RiderAnimator();
 
@@ -270,16 +273,35 @@ export abstract class GroundCharacter extends Character implements MeleeAttacker
     _move.set(0, 0, 0).addScaledVector(_fwd, fIn).addScaledVector(_right, sIn);
 
     if (this.combo.isRolling) {
-      // Commit a roll along input dir (or forward if neutral).
+      // Commit a roll along input dir (or forward if neutral). The roll bypasses the
+      // velocity damping so it stays SNAPPY/responsive; we carry its momentum into
+      // `vel` (capped) so exiting the roll blends smoothly instead of snapping to 0.
       if (_move.lengthSq() < 1e-6) _move.copy(_fwd);
       _move.normalize();
       this.position.addScaledVector(_move, this.combo.rollSpeed * dt);
-    } else if (_move.lengthSq() > 1e-6) {
-      _move.normalize();
-      const speed = this.combo.isAttacking
+      this.vel.copy(_move).multiplyScalar(GROUND.moveSpeed);
+    } else {
+      // Inertial locomotion: accelerate toward the desired input velocity, decay it
+      // (friction) when input releases — so starts/stops have weight, no on/off snap.
+      const hasInput = _move.lengthSq() > 1e-6;
+      const maxSpeed = this.combo.isAttacking
         ? GROUND.moveSpeed * GROUND.attackMoveScale
         : GROUND.moveSpeed;
-      this.position.addScaledVector(_move, speed * dt);
+      if (hasInput) {
+        _move.normalize();
+        _desiredVel.copy(_move).multiplyScalar(maxSpeed);
+      } else {
+        _desiredVel.set(0, 0, 0);
+      }
+      const lambda = hasInput ? GROUND.accel : GROUND.friction;
+      this.vel.lerp(_desiredVel, 1 - Math.exp(-lambda * dt));
+      // Dead-zone snap so a released stop is crisp (no infinite sub-pixel glide).
+      if (!hasInput && this.vel.lengthSq() < 0.04) this.vel.set(0, 0, 0);
+      // Hard cap at the base move speed.
+      if (this.vel.lengthSq() > GROUND.moveSpeed * GROUND.moveSpeed) {
+        this.vel.setLength(GROUND.moveSpeed);
+      }
+      this.position.addScaledVector(this.vel, dt);
     }
 
     this.position.y = GROUND.groundY;
@@ -288,6 +310,7 @@ export abstract class GroundCharacter extends Character implements MeleeAttacker
 
   protected override controlPassive(dt: number, _ctx: EngineContext): void {
     // Passive ally: finish any in-flight swing/roll, otherwise idle on the ground.
+    this.vel.set(0, 0, 0); // drop momentum so a benched hero doesn't drift on re-pilot
     this.combo.update(dt);
     this.position.y = GROUND.groundY;
   }

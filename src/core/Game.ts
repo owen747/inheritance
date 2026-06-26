@@ -1,6 +1,6 @@
 import { Renderer } from './Renderer';
 import { Input } from './Input';
-import { CameraRig } from './CameraRig';
+import { CameraRig, setCameraShakeSink } from './CameraRig';
 import { EntityManager } from './EntityManager';
 import { AudioManager } from './AudioManager';
 import { Entity, isCombatant } from './Entity';
@@ -78,6 +78,8 @@ export class Game {
     this.entities = new EntityManager(this.renderer.scene);
     this.audio = new AudioManager();
     this.cameraRig = new CameraRig(this.renderer.camera);
+    // Register the rig as the global screen-shake sink (combat triggers shake here).
+    setCameraShakeSink(this.cameraRig);
     this.ctx = new GameEngineContext(
       this.entities,
       this.renderer.scene,
@@ -320,7 +322,14 @@ export class Game {
     // long stall (tab refocus) can't produce a giant animation jump.
     if (frameDt > 0) this.entities.animateAll(Math.min(frameDt, MAX_FRAME));
 
+    // Per-frame INTERPOLATED camera follow (decoupled from the fixed sim step, so it
+    // never micro-judders against the smoothly interpolated world at >60Hz). It reads
+    // the SAME `alpha` the renderer uses to lerp the meshes, so camera + world stay
+    // locked. Runs after animateAll (cosmetic sub-parts) and before the draw.
     const alpha = this.phase === 'PLAYING' ? this.acc / STEP : 1;
+    if (this.activeEntity) {
+      this.cameraRig.update(Math.min(frameDt, MAX_FRAME), alpha, this.activeEntity);
+    }
     this.renderer.render(alpha, this.entities);
     this.syncDebug();
     this.hud.sync(this.activeEntity, this.hudProvider?.() ?? EMPTY_HUD_INFO);
@@ -337,7 +346,8 @@ export class Game {
     this.entities.update(dt, this.ctx);
     this.combat.resolve(dt, this.ctx);
     this.currentLevel?.update(dt, this.ctx);
-    if (this.activeEntity) this.cameraRig.update(dt, this.activeEntity);
+    // NOTE: the camera follow is NOT updated here — it runs per render frame in
+    // `frame()` against the interpolated transform to stay judder-free.
   }
 
   private syncDebug(): void {

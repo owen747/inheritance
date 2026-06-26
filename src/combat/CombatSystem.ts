@@ -7,6 +7,8 @@ import * as THREE from 'three';
 import { Entity, Team, isCombatant } from '../core/Entity';
 import type { EngineContext } from '../core/EngineContext';
 import { getVfx } from '../art/vfx';
+import { addCameraShake } from '../core/CameraRig';
+import { COMBAT } from '../config/gameConfig';
 
 /** A live melee strike, in WORLD space, exposed by an attacker during ACTIVE frames. */
 export interface MeleeStrike {
@@ -87,6 +89,14 @@ export class CombatSystem {
 
         getVfx()?.sparkBurst(strike.center);
         ctx.audio.play('melee-hit');
+
+        // Screen shake on a landed hit — bigger hits (and finishers) shake more.
+        // Trauma is clamped inside the rig, so it can never accumulate unbounded.
+        addCameraShake(
+          COMBAT.shakeHit +
+            strike.damage * COMBAT.shakePerDamage +
+            (strike.finisher === true ? COMBAT.shakeFinisher : 0),
+        );
       }
     }
   }
