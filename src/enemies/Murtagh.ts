@@ -83,7 +83,7 @@ export class Murtagh extends Enemy implements MeleeAttacker {
     this.combo = new ComboStateMachine(SWORD_COMBO);
     this.spellTimer = MURTAGH.spellEveryMin;
 
-    const rider = buildRider({ garb: 'murtaghGarb' });
+    const rider = buildRider({ garb: 'murtaghGarb', cloak: 'murtaghCloak' });
     rider.userData.weaponMount.add(buildSword());
     this.mesh = rider;
     this.position.y = GROUND.groundY;

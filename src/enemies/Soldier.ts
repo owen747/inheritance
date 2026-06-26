@@ -59,7 +59,7 @@ export class Soldier extends Enemy implements MeleeAttacker {
     );
     this.combo = new ComboStateMachine(SOLDIER_COMBO);
 
-    const rider = buildRider({ garb: 'bannerRed' });
+    const rider = buildRider({ garb: 'bannerRed', tabard: 'empireTabard', helm: true });
     rider.userData.weaponMount.add(buildSword());
     this.mesh = rider;
     this.position.y = GROUND.groundY;

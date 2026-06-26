@@ -21,8 +21,13 @@ export const PALETTE = {
   thornDark: 0x781219,
   shruikanDark: 0x2b313f, // desaturated dark blue-grey for Shruikan's wings/legs (reads vs a dark sky)
   membrane: 0x2a2d3a, // dark leathery wing membrane
-  horn: 0xe8e2cf, // bone/horn off-white
+  horn: 0xe8e2cf, // bone/horn off-white (horns, spinal spikes, talons, tail blade)
   belly: 0xbfc7d6, // pale underbelly
+
+  // Per-dragon glowing eye tints (emissive, fed through glowMaterial)
+  saphiraEye: 0x7fe9ff, // Saphira — cyan/blue
+  thornEye: 0xff3326, // Thorn — hot red
+  shruikanEye: 0xc4d2e4, // Shruikan — pale, cold
 
   // Riders / humanoids
   eragonSkin: 0xd8a87a,
@@ -31,6 +36,16 @@ export const PALETTE = {
   murtaghGarb: 0x6c2f39, // dark red garb
   roranGarb: 0x6a5230, // earthy brown
   elfTone: 0xcfe6cf, // pale elven complexion accent
+
+  // Rider detailing — cloaks, armor, leather, boots
+  eragonCloak: 0x35507a, // Eragon's Rider blue-grey cape
+  murtaghCloak: 0x3c141b, // Murtagh's dark crimson cape
+  empireTabard: 0x8e1b1b, // Empire soldier front tabard (vs the garb red)
+  leather: 0x4a3220, // belts, grip wraps, haft binding
+  glove: 0x382615, // gloved hands
+  armorSteel: 0x767c85, // plate armor, helms, pauldrons
+  boot: 0x2f2417, // rider boots
+  riderEye: 0x1c1d22, // small dark rider eyes
 
   // Materials / weapons
   steel: 0xb9c2cc, // sword blade

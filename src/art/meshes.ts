@@ -130,33 +130,85 @@ export function buildDragon(colorKey: ColorKey = 'saphira'): THREE.Group {
         : colorKey === 'shruikan'
           ? 'shruikanDark'
           : colorKey;
+
+  // Per-dragon character: Saphira sleeker, Thorn more aggressive (bigger spikes/
+  // horns), Shruikan more massive/jagged (also scaled 1.8x at the call site).
+  const aggressive = colorKey === 'thorn';
+  const massive = colorKey === 'shruikan';
+  const spikeScale = massive ? 1.35 : aggressive ? 1.2 : 0.85; // sleeker default
+  const eyeHex =
+    colorKey === 'thorn'
+      ? colorOf('thornEye')
+      : colorKey === 'shruikan'
+        ? colorOf('shruikanEye')
+        : colorOf('saphiraEye');
+
   const group = new THREE.Group();
   group.name = 'dragon';
 
-  // Body — tapered: chest box + rear box, belly plate underneath.
+  // Body — tapered with extra mid segment + chest/shoulder bulk; belly underneath.
   const body = new THREE.Group();
   body.add(piece(box(1.3, 1.1, 1.8), colorKey, { pos: [0, 0, -0.2] })); // chest (toward -Z)
+  body.add(piece(box(1.15, 1.0, 0.9), colorKey, { pos: [0, -0.02, 0.55] })); // midriff (smoother taper)
   body.add(piece(box(1.0, 0.9, 1.4), colorKey, { pos: [0, -0.05, 1.0] })); // hindquarters (+Z)
+  body.add(piece(box(1.5, 0.75, 0.95), colorKey, { pos: [0, 0.22, -0.85] })); // shoulder/chest bulk
   body.add(piece(box(0.9, 0.4, 2.6), 'belly', { pos: [0, -0.55, 0.3] })); // pale underbelly
+  body.add(piece(box(0.7, 0.12, 0.5), 'belly', { pos: [0, -0.74, -0.3] })); // belly scute line
+  body.add(piece(box(0.7, 0.12, 0.5), 'belly', { pos: [0, -0.74, 0.6] })); // belly scute line
   group.add(body);
 
-  // Neck — segmented, rising toward the head at -Z.
+  // Spinal ridge of small spikes running down the back.
+  const backSpine: ReadonlyArray<readonly [number, number]> = [
+    [-1.1, 0.62],
+    [-0.5, 0.66],
+    [0.1, 0.62],
+    [0.7, 0.55],
+    [1.2, 0.45],
+  ];
+  for (const [z, y] of backSpine) {
+    group.add(piece(cone(0.11, 0.34, 4), 'horn', { pos: [0, y, z], scale: [spikeScale, spikeScale, spikeScale] }));
+  }
+
+  // Neck — segmented, rising toward the head at -Z, with neck spikes continuing.
   const neck = new THREE.Group();
   neck.add(piece(cyl(0.42, 0.5, 0.9, 6), colorKey, { pos: [0, 0.45, -1.1], rot: [0.5, 0, 0] }));
   neck.add(piece(cyl(0.34, 0.42, 0.8, 6), colorKey, { pos: [0, 1.0, -1.65], rot: [0.75, 0, 0] }));
+  neck.add(piece(cone(0.09, 0.28, 4), 'horn', { pos: [0, 0.78, -1.25], rot: [-0.4, 0, 0], scale: [spikeScale, spikeScale, spikeScale] }));
+  neck.add(piece(cone(0.08, 0.24, 4), 'horn', { pos: [0, 1.22, -1.75], rot: [-0.6, 0, 0], scale: [spikeScale, spikeScale, spikeScale] }));
   group.add(neck);
 
-  // Head — pivot group at the neck tip so it can turn; snout cone points -Z.
+  // Head — pivot group at the neck tip so it can turn; ALL detail hangs off this
+  // pivot at [0,1.45,-2.1] so flapWings' head bob still reads. A defined maw (skull
+  // + snout + lower jaw + mouth line), a brow ridge, glowing eyes, swept horns/frills.
   const head = new THREE.Group();
   head.name = 'head';
   head.position.set(0, 1.45, -2.1);
   head.add(piece(box(0.5, 0.5, 0.7), colorKey, { pos: [0, 0, 0] })); // skull
-  head.add(piece(cone(0.28, 0.7, 5), colorKey, { pos: [0, -0.05, -0.6], rot: [-Math.PI / 2, 0, 0] })); // snout
-  head.add(piece(cone(0.1, 0.45, 4), 'horn', { pos: [-0.18, 0.4, 0.1], rot: [-0.4, 0, 0.2] })); // horn L
-  head.add(piece(cone(0.1, 0.45, 4), 'horn', { pos: [0.18, 0.4, 0.1], rot: [-0.4, 0, -0.2] })); // horn R
+  head.add(piece(box(0.46, 0.16, 0.34), dark, { pos: [0, 0.28, -0.16] })); // brow ridge
+  head.add(piece(cone(0.28, 0.7, 5), colorKey, { pos: [0, 0.02, -0.6], rot: [-Math.PI / 2, 0, 0] })); // upper snout/maw
+  head.add(piece(box(0.34, 0.16, 0.66), dark, { pos: [0, -0.22, -0.45] })); // lower jaw (mouth line)
+  head.add(piece(cone(0.18, 0.4, 5), colorKey, { pos: [0, -0.16, -0.66], rot: [-Math.PI / 2, 0, 0] })); // chin
+  // Glowing eyes (per-dragon tint), set into the skull just behind the snout.
+  for (const ex of [-0.21, 0.21] as const) {
+    const eye = new THREE.Mesh(ico(0.07, 0), glowMaterial(eyeHex, 1.7));
+    eye.position.set(ex, 0.08, -0.2);
+    eye.castShadow = true;
+    head.add(eye);
+  }
+  // Primary horns (bigger/sharper on aggressive/massive dragons).
+  head.add(piece(cone(0.1, 0.45, 4), 'horn', { pos: [-0.18, 0.4, 0.1], rot: [-0.4, 0, 0.2], scale: [spikeScale, spikeScale, spikeScale] })); // horn L
+  head.add(piece(cone(0.1, 0.45, 4), 'horn', { pos: [0.18, 0.4, 0.1], rot: [-0.4, 0, -0.2], scale: [spikeScale, spikeScale, spikeScale] })); // horn R
+  // A second pair of smaller swept-back horns/frills.
+  head.add(piece(cone(0.07, 0.34, 4), 'horn', { pos: [-0.27, 0.18, 0.22], rot: [0.5, 0, 0.5], scale: [spikeScale, spikeScale, spikeScale] }));
+  head.add(piece(cone(0.07, 0.34, 4), 'horn', { pos: [0.27, 0.18, 0.22], rot: [0.5, 0, -0.5], scale: [spikeScale, spikeScale, spikeScale] }));
+  if (aggressive || massive) {
+    // Extra cheek frills for a meaner profile.
+    head.add(piece(cone(0.06, 0.3, 4), 'horn', { pos: [-0.3, -0.04, 0.2], rot: [0.9, 0, 0.7] }));
+    head.add(piece(cone(0.06, 0.3, 4), 'horn', { pos: [0.3, -0.04, 0.2], rot: [0.9, 0, -0.7] }));
+  }
   group.add(head);
 
-  // Wings — pivot at shoulder; membrane fans out along ±X. Flap = rotate.z.
+  // Wings — pivot at shoulder; struts + segmented membrane fan out along ±X. Flap = rotate.z.
   const wingL = buildWing(colorKey, dark, +1);
   wingL.name = 'wingL';
   wingL.position.set(0.55, 0.55, -0.1);
@@ -165,39 +217,85 @@ export function buildDragon(colorKey: ColorKey = 'saphira'): THREE.Group {
   wingR.position.set(-0.55, 0.55, -0.1);
   group.add(wingL, wingR);
 
-  // Tail — pivot at the rear; tapering cones trailing +Z so it can sway.
+  // Tail — pivot at the rear; tapering segments trailing +Z, spinal spikes
+  // continuing onto it and a fin/blade at the tip. All under the tail pivot so
+  // flapWings' tail sway carries the new detail.
   const tail = new THREE.Group();
   tail.name = 'tail';
   tail.position.set(0, -0.1, 1.7);
   tail.add(piece(cyl(0.3, 0.4, 0.9, 6), colorKey, { pos: [0, 0, 0.45], rot: [Math.PI / 2, 0, 0] }));
-  tail.add(piece(cyl(0.18, 0.3, 0.9, 6), colorKey, { pos: [0, 0, 1.3], rot: [Math.PI / 2, 0, 0] }));
-  tail.add(piece(cone(0.18, 0.7, 5), colorKey, { pos: [0, 0, 2.0], rot: [Math.PI / 2, 0, 0] })); // tail spike
+  tail.add(piece(cyl(0.22, 0.3, 0.9, 6), colorKey, { pos: [0, 0, 1.3], rot: [Math.PI / 2, 0, 0] }));
+  tail.add(piece(cyl(0.14, 0.22, 0.7, 6), colorKey, { pos: [0, 0, 2.0], rot: [Math.PI / 2, 0, 0] })); // extra segment
+  tail.add(piece(cone(0.16, 0.6, 5), colorKey, { pos: [0, 0, 2.55], rot: [Math.PI / 2, 0, 0] })); // tail spike
+  // Tail spikes (spine continues) + a vertical tail blade fin at the tip.
+  for (const z of [0.4, 1.1, 1.8] as const) {
+    tail.add(piece(cone(0.09, 0.3, 4), 'horn', { pos: [0, 0.18, z], scale: [spikeScale, spikeScale, spikeScale] }));
+  }
+  tail.add(piece(box(0.08, 0.7, 0.55), 'horn', { pos: [0, 0.14, 2.45] })); // tail blade fin
   group.add(tail);
 
-  // Legs — 4 simple boxes.
-  const legGeo = box(0.3, 0.7, 0.3);
-  group.add(piece(legGeo, dark, { pos: [0.5, -0.75, -0.5] }));
-  group.add(piece(legGeo, dark, { pos: [-0.5, -0.75, -0.5] }));
-  group.add(piece(legGeo, dark, { pos: [0.5, -0.75, 0.9] }));
-  group.add(piece(legGeo, dark, { pos: [-0.5, -0.75, 0.9] }));
+  // Legs — each a grouped haunch + lower leg with a clawed foot (static; cosmetic).
+  group.add(buildDragonLeg(colorKey, dark, 0.55, -0.55)); // front L
+  group.add(buildDragonLeg(colorKey, dark, -0.55, -0.55)); // front R
+  group.add(buildDragonLeg(colorKey, dark, 0.58, 0.95)); // rear L
+  group.add(buildDragonLeg(colorKey, dark, -0.58, 0.95)); // rear R
 
   const parts: DragonParts = { wingL, wingR, head, tail };
   group.userData = parts;
   return group;
 }
 
-/** A single wing: shoulder-pivoted group, membrane fanning out along `side` (+1 = left/+X). */
+/**
+ * One dragon leg as a static group: haunch (thigh) + lower leg + a clawed foot
+ * with cone talons. Not animated (dragon legs aren't in DragonParts) — grouped
+ * purely for a richer silhouette. Placed so the foot lands near y≈-1.1 (matching
+ * the old simple leg boxes) when the group sits at [x, -0.2, z].
+ */
+function buildDragonLeg(thigh: ColorKey, lower: ColorKey, x: number, z: number): THREE.Group {
+  const leg = new THREE.Group();
+  leg.position.set(x, -0.2, z);
+  leg.add(piece(box(0.36, 0.5, 0.4), thigh, { pos: [0, -0.22, 0] })); // haunch
+  leg.add(piece(box(0.26, 0.45, 0.28), lower, { pos: [0, -0.62, 0.05] })); // lower leg
+  leg.add(piece(box(0.32, 0.12, 0.46), lower, { pos: [0, -0.86, -0.1] })); // foot pad
+  for (const tx of [-0.1, 0, 0.1] as const) {
+    leg.add(piece(cone(0.05, 0.18, 4), 'horn', { pos: [tx, -0.9, -0.34], rot: [-1.2, 0, 0] })); // talon
+  }
+  return leg;
+}
+
+/**
+ * A single wing: shoulder-pivoted group. Geometry extends along `side` (+1 =
+ * left/+X) from the pivot and trails +Z, so the existing local-Z flap still
+ * reads. A main arm bone, 2-3 finger-bone struts fanning toward the trailing
+ * edge, a scalloped membrane split into panels, and a small wing-claw at the top.
+ */
 function buildWing(boneColor: ColorKey, membraneColor: ColorKey, side: 1 | -1): THREE.Group {
   const wing = new THREE.Group();
-  // Main bone along ±X.
+  // Main arm bone along ±X.
   wing.add(piece(box(2.2, 0.14, 0.16), boneColor, { pos: [side * 1.1, 0, 0] }));
-  // Membrane — thin double-sided-ish panel; use a flattened box for faceting.
-  const membrane = new THREE.Mesh(box(2.0, 0.04, 1.6), materialFor(membraneColor, { doubleSide: true }));
-  membrane.position.set(side * 1.0, -0.02, 0.5);
-  membrane.castShadow = true;
-  wing.add(membrane);
-  // A couple of finger struts for silhouette.
-  wing.add(piece(box(1.4, 0.08, 0.1), boneColor, { pos: [side * 0.9, -0.02, 0.7], rot: [0, side * 0.5, 0] }));
+  // Wing-claw at the top/outer tip.
+  wing.add(piece(cone(0.07, 0.32, 4), 'horn', { pos: [side * 2.2, 0.06, 0.02], rot: [0.4, 0, side * -1.3] }));
+  // Finger-bone struts fanning toward the trailing edge (+Z): [xFrac, z, len, yRot].
+  const fingers: ReadonlyArray<readonly [number, number, number, number]> = [
+    [0.7, 0.55, 1.5, 0.35],
+    [1.1, 0.7, 1.3, 0.7],
+    [1.55, 0.78, 1.0, 1.0],
+  ];
+  for (const [xf, z, len, yr] of fingers) {
+    wing.add(piece(box(len, 0.08, 0.1), boneColor, { pos: [side * xf, -0.02, z], rot: [0, side * yr, 0] }));
+  }
+  // Scalloped membrane — a few double-sided panels rather than one flat slab.
+  const panels: ReadonlyArray<readonly [number, number, number]> = [
+    [0.45, 1.7, 0.55],
+    [1.1, 1.45, 0.6],
+    [1.7, 1.0, 0.55],
+  ];
+  for (const [xc, depth, zc] of panels) {
+    const m = new THREE.Mesh(box(0.72, 0.04, depth), materialFor(membraneColor, { doubleSide: true }));
+    m.position.set(side * xc, -0.02, zc);
+    m.castShadow = true;
+    wing.add(m);
+  }
   return wing;
 }
 
@@ -211,6 +309,20 @@ export interface RiderOptions {
   garb?: ColorKey;
   /** Hair color key. Default 'eragonHair'. */
   hair?: ColorKey;
+  /** Optional back-cape color. Omitted = no cloak (rugged look). */
+  cloak?: ColorKey;
+  /** Optional front tabard panel color (e.g. Empire soldiers). */
+  tabard?: ColorKey;
+  /** Steel helm (covers the hair) instead of a bare head. Default false. */
+  helm?: boolean;
+  /** Heavy plate: chest plate + pauldrons (brutish bulk). Default false. */
+  heavyArmor?: boolean;
+  /** Horizontal bulk multiplier for the torso (feet stay at y=0). Default 1. */
+  bodyScale?: number;
+  /** Boot color key. Default 'boot'. */
+  boots?: ColorKey;
+  /** Glove/hand color key. Default 'glove'. */
+  gloves?: ColorKey;
 }
 
 /** Animatable handles attached to a rider group's userData. */
@@ -230,13 +342,37 @@ export interface RiderParts {
   legR: THREE.Group;
 }
 
-/** A leg as a hip-pivot group: the box hangs below the joint so `rotation.x` swings it. */
-function legPivot(garb: ColorKey, x: number, name: string): THREE.Group {
+/**
+ * A leg as a hip-pivot group: ALL geometry hangs BELOW the joint origin so
+ * `rotation.x` swings the whole leg (thigh + shin + boot). The boot bottom lands
+ * at world y=0 when the hip sits at y=0.75 (feet on the ground).
+ */
+function legPivot(garb: ColorKey, boots: ColorKey, x: number, name: string): THREE.Group {
   const hip = new THREE.Group();
   hip.name = name;
   hip.position.set(x, 0.75, 0); // hip joint height (leg top)
-  hip.add(piece(box(0.2, 0.75, 0.22), garb, { pos: [0, -0.37, 0] }));
+  hip.add(piece(box(0.21, 0.44, 0.23), garb, { pos: [0, -0.22, 0] })); // thigh: -0.44..0
+  hip.add(piece(box(0.18, 0.3, 0.2), garb, { pos: [0, -0.55, 0] })); // shin (knee implied): -0.70..-0.40
+  hip.add(piece(box(0.24, 0.14, 0.34), boots, { pos: [0, -0.68, -0.07] })); // boot: -0.75..-0.61, toe -Z
   return hip;
+}
+
+/**
+ * One arm as a shoulder-pivoted group: upper arm hangs from the shoulder, a bent
+ * forearm sub-group reaches down (and forward on the weapon arm so the gloved hand
+ * meets the weaponMount). Static cosmetic detail — lives under `body`.
+ */
+function buildArm(sleeve: ColorKey, gloves: ColorKey, x: number, weapon: boolean): THREE.Group {
+  const shoulder = new THREE.Group();
+  shoulder.position.set(x, 1.46, 0);
+  shoulder.add(piece(box(0.16, 0.42, 0.16), sleeve, { pos: [0, -0.21, 0] })); // upper arm
+  const fore = new THREE.Group();
+  fore.position.set(0, -0.42, 0);
+  fore.rotation.x = weapon ? -0.6 : -0.12; // weapon arm bends forward to grip the mount
+  fore.add(piece(box(0.14, 0.4, 0.14), sleeve, { pos: [0, -0.2, 0] })); // forearm
+  fore.add(piece(box(0.14, 0.15, 0.17), gloves, { pos: [0, -0.43, 0.01] })); // gloved hand
+  shoulder.add(fore);
+  return shoulder;
 }
 
 /**
@@ -249,31 +385,78 @@ export function buildRider(opts: RiderOptions = {}): THREE.Group {
   const skin: ColorKey = opts.skin ?? 'eragonSkin';
   const garb: ColorKey = opts.garb ?? 'eragonGarb';
   const hair: ColorKey = opts.hair ?? 'eragonHair';
+  const boots: ColorKey = opts.boots ?? 'boot';
+  const gloves: ColorKey = opts.gloves ?? 'glove';
+  const helm = opts.helm ?? false;
+  const heavyArmor = opts.heavyArmor ?? false;
+  const bodyScale = opts.bodyScale ?? 1;
 
   const group = new THREE.Group();
   group.name = 'rider';
 
-  // Single pivot holding the whole figure — bob/lean it, not the root.
+  // Single pivot holding the whole figure — bob/lean it, not the root. A
+  // horizontal-only bulk scale (Y left at 1) keeps the feet on the ground plane.
   const body = new THREE.Group();
   body.name = 'body';
+  body.scale.set(bodyScale, 1, bodyScale);
   group.add(body);
 
-  // Torso + pelvis.
-  body.add(piece(box(0.6, 0.7, 0.32), garb, { pos: [0, 1.15, 0] }));
-  body.add(piece(box(0.5, 0.35, 0.3), garb, { pos: [0, 0.72, 0] }));
+  // Torso + pelvis + shoulders + waist belt (light tunic/armor layering).
+  body.add(piece(box(0.6, 0.7, 0.32), garb, { pos: [0, 1.15, 0] })); // chest
+  body.add(piece(box(0.5, 0.35, 0.3), garb, { pos: [0, 0.72, 0] })); // pelvis
+  body.add(piece(box(0.7, 0.18, 0.36), garb, { pos: [0, 1.48, 0] })); // shoulders
+  body.add(piece(box(0.62, 0.1, 0.34), 'leather', { pos: [0, 0.9, 0] })); // belt
 
-  // Head + hair cap.
+  // Optional front tabard (Empire soldiers) + heavy plate (brutes).
+  if (opts.tabard) {
+    body.add(piece(box(0.4, 0.7, 0.06), opts.tabard, { pos: [0, 1.18, -0.18] }));
+  }
+  if (heavyArmor) {
+    body.add(piece(box(0.68, 0.62, 0.38), 'armorSteel', { pos: [0, 1.2, 0] })); // chest plate
+    body.add(piece(box(0.26, 0.22, 0.3), 'armorSteel', { pos: [0.44, 1.5, 0] })); // pauldron L
+    body.add(piece(box(0.26, 0.22, 0.3), 'armorSteel', { pos: [-0.44, 1.5, 0] })); // pauldron R
+  }
+
+  // Optional cloak/cape — a flared double-sided back panel + shoulder clasp.
+  if (opts.cloak) {
+    const cape = new THREE.Mesh(box(0.62, 1.3, 0.05), materialFor(opts.cloak, { doubleSide: true }));
+    cape.position.set(0, 1.0, 0.22);
+    cape.rotation.x = 0.13; // flares back off the shoulders
+    cape.castShadow = true;
+    body.add(cape);
+    const hem = new THREE.Mesh(box(0.78, 0.5, 0.05), materialFor(opts.cloak, { doubleSide: true }));
+    hem.position.set(0, 0.42, 0.31);
+    hem.rotation.x = 0.22;
+    hem.castShadow = true;
+    body.add(hem);
+    body.add(piece(box(0.52, 0.1, 0.16), opts.cloak, { pos: [0, 1.52, 0.12] })); // clasp/collar
+  }
+
+  // Head — kept as the icosahedron `head` part. A simple face (eyes + nose/brow)
+  // plus either a shaped hair mass or a steel helm.
   const head = piece(ico(0.24, 0), skin, { pos: [0, 1.7, 0], name: 'head' });
   body.add(head);
-  body.add(piece(box(0.34, 0.2, 0.34), hair, { pos: [0, 1.82, -0.02] }));
+  for (const ex of [-0.09, 0.09] as const) {
+    body.add(piece(box(0.06, 0.06, 0.04), 'riderEye', { pos: [ex, 1.73, -0.21] })); // eye
+  }
+  body.add(piece(box(0.06, 0.09, 0.07), skin, { pos: [0, 1.66, -0.23] })); // nose
+  body.add(piece(box(0.26, 0.04, 0.06), hair, { pos: [0, 1.8, -0.18] })); // brow
+  if (helm) {
+    body.add(piece(box(0.36, 0.28, 0.38), 'armorSteel', { pos: [0, 1.8, 0] })); // helm dome
+    body.add(piece(box(0.06, 0.26, 0.07), 'armorSteel', { pos: [0, 1.7, -0.21] })); // nasal guard
+  } else {
+    body.add(piece(box(0.36, 0.22, 0.38), hair, { pos: [0, 1.84, 0] })); // hair cap
+    body.add(piece(box(0.3, 0.26, 0.18), hair, { pos: [0, 1.74, 0.18] })); // longer hair at the back
+  }
 
-  // Arms.
-  body.add(piece(box(0.16, 0.62, 0.16), garb, { pos: [0.4, 1.15, 0] })); // left upper arm
-  body.add(piece(box(0.16, 0.62, 0.16), garb, { pos: [-0.4, 1.15, 0] })); // right upper arm
+  // Arms — upper arm + bent forearm + gloved hand. The right (weapon) arm reaches
+  // forward so its hand grips at the weaponMount.
+  body.add(buildArm(garb, gloves, 0.42, false)); // left arm
+  body.add(buildArm(garb, gloves, -0.42, true)); // right (weapon) arm
 
-  // Legs as hip pivots (walk swing).
-  const legL = legPivot(garb, 0.16, 'legL');
-  const legR = legPivot(garb, -0.16, 'legR');
+  // Legs as hip pivots (walk swing) — thigh + shin + boot hang below the joint.
+  const legL = legPivot(garb, boots, 0.16, 'legL');
+  const legR = legPivot(garb, boots, -0.16, 'legR');
   body.add(legL, legR);
 
   // Weapon mount at the right hand. A weapon built along +Y is held upright;
@@ -307,9 +490,13 @@ export function buildSword(): THREE.Group {
   const g = new THREE.Group();
   g.name = 'sword';
   g.add(piece(box(0.07, 1.0, 0.02), 'steel', { pos: [0, 0.6, 0] })); // blade
+  g.add(piece(box(0.02, 0.8, 0.03), 'ironDark', { pos: [0, 0.62, 0] })); // fuller (central groove)
+  g.add(piece(box(0.09, 0.12, 0.04), 'ironDark', { pos: [0, 0.16, 0] })); // ricasso (unsharpened base)
   g.add(piece(cone(0.06, 0.16, 4), 'steel', { pos: [0, 1.18, 0] })); // tip
   g.add(piece(box(0.32, 0.08, 0.08), 'ironDark', { pos: [0, 0.08, 0] })); // crossguard
-  g.add(piece(cyl(0.05, 0.05, 0.22, 6), 'wood', { pos: [0, -0.08, 0] })); // grip
+  g.add(piece(cyl(0.05, 0.05, 0.22, 6), 'leather', { pos: [0, -0.08, 0] })); // leather-wrapped grip
+  g.add(piece(box(0.11, 0.03, 0.11), 'ironDark', { pos: [0, -0.02, 0] })); // grip wrap band
+  g.add(piece(box(0.11, 0.03, 0.11), 'ironDark', { pos: [0, -0.14, 0] })); // grip wrap band
   g.add(piece(ico(0.07, 0), 'ironDark', { pos: [0, -0.21, 0] })); // pommel
   return g;
 }
@@ -319,7 +506,11 @@ export function buildHammer(): THREE.Group {
   const g = new THREE.Group();
   g.name = 'hammer';
   g.add(piece(cyl(0.06, 0.07, 1.2, 6), 'wood', { pos: [0, 0.4, 0] })); // haft
+  g.add(piece(box(0.13, 0.04, 0.13), 'leather', { pos: [0, 0.1, 0] })); // haft wrap band
+  g.add(piece(box(0.13, 0.04, 0.13), 'leather', { pos: [0, 0.3, 0] })); // haft wrap band
   g.add(piece(box(0.36, 0.34, 0.34), 'ironDark', { pos: [0, 1.05, 0] })); // head
+  g.add(piece(box(0.4, 0.08, 0.38), 'steel', { pos: [0, 1.2, 0] })); // top reinforcing band
+  g.add(piece(box(0.4, 0.08, 0.38), 'steel', { pos: [0, 0.9, 0] })); // bottom reinforcing band
   g.add(piece(box(0.16, 0.3, 0.3), 'ironDark', { pos: [0.28, 1.05, 0] })); // claw side
   return g;
 }

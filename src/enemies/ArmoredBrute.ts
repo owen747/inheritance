@@ -63,8 +63,14 @@ export class ArmoredBrute extends Enemy implements MeleeAttacker {
     );
     this.combo = new ComboStateMachine(BRUTE_COMBO);
 
-    // Iron-clad look: dark armored garb wielding a hammer.
-    const rider = buildRider({ garb: 'ironDark', skin: 'eragonSkin' });
+    // Iron-clad look: heavy plate + helm + extra bulk, wielding a hammer.
+    const rider = buildRider({
+      garb: 'ironDark',
+      skin: 'eragonSkin',
+      heavyArmor: true,
+      helm: true,
+      bodyScale: 1.25,
+    });
     rider.userData.weaponMount.add(buildHammer());
     rider.scale.setScalar(1.2);
     this.baseScale = 1.2; // compose spawn-in / death-fade with his bulk

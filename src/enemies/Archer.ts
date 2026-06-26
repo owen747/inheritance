@@ -98,7 +98,7 @@ export class Archer extends Enemy {
     );
     this.rooftop = opts.rooftop ?? false;
 
-    const rider = buildRider({ garb: 'bannerRed', hair: 'eragonHair' });
+    const rider = buildRider({ garb: 'bannerRed', hair: 'eragonHair', tabard: 'empireTabard' });
     this.mesh = rider;
     // Ground archers stand on the plane; rooftop archers KEEP the elevated y the
     // level assigns after construction (so do NOT pin y here for rooftops).

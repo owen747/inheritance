@@ -45,7 +45,7 @@ export class Eragon extends GroundCharacter {
     this.spells = spells;
     this.loadout = DEFAULT_SPELL_LOADOUT.slice(0, 4);
 
-    const rider = buildRider({ skin: 'eragonSkin', garb: 'eragonGarb', hair: 'eragonHair' });
+    const rider = buildRider({ skin: 'eragonSkin', garb: 'eragonGarb', hair: 'eragonHair', cloak: 'eragonCloak' });
     rider.userData.weaponMount.add(buildSword());
     this.mesh = rider;
     this.collider = { radius: 0.9 };

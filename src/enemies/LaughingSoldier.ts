@@ -88,7 +88,7 @@ export class LaughingSoldier extends Enemy implements MeleeAttacker {
     );
     this.combo = new ComboStateMachine(LAUGHER_COMBO);
 
-    const rider = buildRider({ garb: 'bannerRed', skin: 'eragonSkin', hair: 'eragonHair' });
+    const rider = buildRider({ garb: 'bannerRed', skin: 'eragonSkin', hair: 'eragonHair', tabard: 'empireTabard', helm: true });
     rider.userData.weaponMount.add(buildSword());
 
     // Loud stagger telegraph: a glow halo, hidden until staggered.
